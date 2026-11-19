@@ -57,7 +57,7 @@ function renderData(v){
     <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
       В Excel: «Файл → Сохранить как → CSV (разделители — точка с запятой)», затем загрузите файл сюда.
       Уже существующие записи (сотрудники — по ФИО и таб. №, позиции — по наименованию) пропускаются.
-      Кодировка UTF-8 и Windows-1251 определяется автоматически.</p>
+      Кодировка UTF-8 и Windows-1251 определяется автоматически. Если срок носки не указан, позиция получит срок 12 мес. — отредактируйте потом в справочнике.</p>
     <div class="form-row">
       <div class="field"><label>Что импортируем</label><select id="imp-kind">
         <option value="employees">Сотрудники</option>
@@ -154,7 +154,7 @@ function renderData(v){
     const rd = new FileReader();
     rd.onload = () => {
       let text = rd.result;
-      if(text.includes("\uFFFD")){ // не UTF-8 — читаем как Windows-1251
+      if(text.includes("")){ // не UTF-8 — читаем как Windows-1251
         const rd2 = new FileReader();
         rd2.onload = () => importCSV(kind, rd2.result);
         rd2.readAsText(f, "windows-1251");
@@ -192,7 +192,7 @@ function splitCSVLine(line, delim){
   return out;
 }
 function parseCSV(text){
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim() !== "");
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim() !== "");
   if(!lines.length) return [];
   const delim = lines[0].includes(";") ? ";" : ",";
   return lines.map(l => splitCSVLine(l, delim));
@@ -207,7 +207,7 @@ function importCSV(kind, text){
   const rows = parseCSV(text);
   if(rows.length < 2){ toast("Файл пуст или нет строк данных","err"); return; }
   const data = rows.slice(1); // первая строка — заголовок
-  let added = 0, skipped = 0;
+  let added = 0, skipped = 0, defaulted = 0;
   if(kind === "employees"){
     for(const r of data){
       const fio = r[0]||"";
@@ -230,8 +230,8 @@ function importCSV(kind, text){
       const name = r[0]||"";
       if(!name){ skipped++; continue; }
       if(db.items.some(i => i.name.toLowerCase()===name.toLowerCase())){ skipped++; continue; }
-      const sock = +r[3]||0;
-      if(sock < 1){ skipped++; continue; }
+      let sock = parseInt((r[3]||"").replace(",","."), 10);
+      if(!(sock >= 1)){ sock = 12; defaulted++; } // срок не указан — ставим 12 мес., правится в справочнике
       db.items.push({ id:uid(), name,
         type: ITEM_TYPES.includes(r[1]) ? r[1] : "Прочее",
         unit: r[2]||"шт", sockMonths: sock, normPoint: r[4]||"", model: r[5]||"" });
@@ -239,7 +239,8 @@ function importCSV(kind, text){
     }
   }
   save(); render(); updateWarnBadge();
-  toast(`Импортировано: ${added}; пропущено (дубли/ошибки): ${skipped}`, added ? "" : "warn");
+  toast(`Импортировано: ${added}; пропущено (дубли/пустые строки): ${skipped}` +
+    (defaulted ? `; без срока носки — установлен 12 мес.: ${defaulted}` : ""), added ? "" : "warn");
 }
 
 function loadDemo(){
