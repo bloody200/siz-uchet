@@ -58,9 +58,9 @@ function renderDashboard(v){
     <table>
       <tbody>
         <tr><td class="num" style="width:30px">1</td><td>Подключите или создайте <b>файл базы данных</b> — всё будет сохраняться автоматически.</td></tr>
-        <tr><td class="num">2</td><td>Заполните справочники: номенклатура СИЗ (со сроками носки) и сотрудники (с размерами).</td></tr>
+        <tr><td class="num">2</td><td>Заполните справочники: номенклатура СИЗ (со сроками носки), <b>нормы выдачи</b> и сотрудники (с размерами и назначенной нормой).</td></tr>
         <tr><td class="num">3</td><td>Оформите <b>Поступление</b> — приёмку СИЗ на склад (с датами сроков годности).</td></tr>
-        <tr><td class="num">4</td><td>Оформляйте <b>Выдачу</b> — программа рассчитает срок окончания и не даст выдать просроченное. По документу выдачи печатается ведомость <b>МБ-7</b>.</td></tr>
+        <tr><td class="num">4</td><td>Оформляйте <b>Выдачу</b> (можно заполнить по норме сотрудника) — программа рассчитает срок окончания и не даст выдать просроченное. По документу печатается ведомость <b>МБ-7</b>.</td></tr>
         <tr><td class="num">5</td><td>Печатайте <b>личные карточки</b> (приказ № 766н или МБ-6), следите за отчётом <b>«Истекающие сроки»</b> — просроченное списывайте документом «Списание».</td></tr>
       </tbody>
     </table>
@@ -78,6 +78,7 @@ function renderEmployees(v){
       <td class="num">${esc(e.tabnum||"—")}</td>
       <td>${esc(e.position||"")}</td>
       <td>${esc(e.dept||"")}</td>
+      <td style="font-size:13px">${e.normId?esc(normName(e.normId)):"—"}</td>
       <td class="num">${esc(e.sizeOdezhda||"—")} / ${esc(e.sizeObuv||"—")} / ${esc(e.sizeGolovnoi||"—")}</td>
       <td class="num">${hold.reduce((s,l)=>s+l.left,0)||"—"}</td>
       <td style="white-space:nowrap">
@@ -94,7 +95,7 @@ function renderEmployees(v){
     <button class="btn primary" id="add-emp" type="button">+ Добавить сотрудника</button>
   </div>
   ${db.employees.length ? `<div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>ФИО</th><th>Таб. №</th><th>Должность</th><th>Подразделение</th><th>Размеры (од/об/гол)</th><th>СИЗ на руках</th><th></th></tr></thead>
+    <thead><tr><th>ФИО</th><th>Таб. №</th><th>Должность</th><th>Подразделение</th><th>Норма выдачи</th><th>Размеры (од/об/гол)</th><th>СИЗ на руках</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`
   : `<div class="empty">Сотрудников пока нет. Добавьте первого — понадобятся ФИО, должность и размеры.</div>`}`;
 
@@ -111,7 +112,7 @@ function renderEmployees(v){
 }
 
 function empForm(id){
-  const e = id ? empById(id) : {fio:"",tabnum:"",position:"",dept:"",pol:"",rost:"",hiredDate:"",sizeOdezhda:"",sizeObuv:"",sizeGolovnoi:"",sizeSIZOD:"",sizeRuk:""};
+  const e = id ? empById(id) : {fio:"",tabnum:"",position:"",dept:"",pol:"",rost:"",hiredDate:"",sizeOdezhda:"",sizeObuv:"",sizeGolovnoi:"",sizeSIZOD:"",sizeRuk:"",normId:""};
   openModal(id ? "Изменить сотрудника" : "Новый сотрудник", `
     <div class="field"><label>ФИО *</label><input id="f-fio" value="${esc(e.fio)}"></div>
     <div class="form-row">
@@ -122,6 +123,9 @@ function empForm(id){
       <div class="field"><label>Подразделение</label><input id="f-dept" value="${esc(e.dept)}"></div>
       <div class="field"><label>Дата поступления на работу</label><input id="f-hired" class="num" type="date" value="${esc(e.hiredDate)}"></div>
     </div>
+    <div class="field"><label>Норма выдачи (для автозаполнения выдачи и отчёта обеспеченности)</label>
+      <select id="f-norm"><option value="">— не назначена —</option>${
+        db.norms.map(n=>`<option value="${n.id}"${e.normId===n.id?" selected":""}>${esc(n.name)}</option>`).join("")}</select></div>
     <div class="form-row">
       <div class="field"><label>Пол</label><select id="f-pol">
         <option value="">—</option>
@@ -153,7 +157,8 @@ function empForm(id){
         sizeObuv: m.querySelector("#f-sb").value.trim(),
         sizeGolovnoi: m.querySelector("#f-sg").value.trim(),
         sizeSIZOD: m.querySelector("#f-sd").value.trim(),
-        sizeRuk: m.querySelector("#f-sr").value.trim() };
+        sizeRuk: m.querySelector("#f-sr").value.trim(),
+        normId: m.querySelector("#f-norm").value };
       if(id) Object.assign(empById(id), rec); else db.employees.push(rec);
       save(); render(); toast("Сохранено");
     });
@@ -223,4 +228,107 @@ function itemForm(id){
       if(id) Object.assign(itemById(id), rec); else db.items.push(rec);
       save(); render(); toast("Сохранено");
     });
+}
+
+/* ================= НОРМЫ ВЫДАЧИ ================= */
+let normEditId = null;   // null — новая норма
+let normLines = [];
+
+function normLinesDraw(){
+  const tb = document.getElementById("n-lines-tbody");
+  tb.innerHTML = normLines.map((l,idx) => `<tr>
+    <td><select data-f="itemId">${itemOptions(l.itemId)}</select></td>
+    <td style="width:110px"><input data-f="qty" class="num" type="number" min="0.5" step="0.5" value="${l.qty||1}"></td>
+    <td style="width:36px"><button class="line-del" type="button" title="Удалить строку">×</button></td>
+  </tr>`).join("");
+  tb.querySelectorAll("tr").forEach((tr,idx) => {
+    tr.querySelectorAll("[data-f]").forEach(inp => inp.addEventListener("input", () => {
+      const f = inp.dataset.f;
+      normLines[idx][f] = f==="qty" ? (+inp.value||0) : inp.value;
+    }));
+    tr.querySelector(".line-del").addEventListener("click", () => { normLines.splice(idx,1); normLinesDraw(); });
+  });
+}
+
+function renderNorms(v){
+  const editing = normEditId ? normById(normEditId) : null;
+  if(editing && !normLines.length) normLines = editing.lines.map(l=>({...l}));
+  if(!normEditId && !normLines.length) normLines = [{itemId:"",qty:1}];
+
+  const rows = db.norms.map(n => {
+    const used = db.employees.filter(e=>e.normId===n.id).length;
+    return `<tr>
+      <td><b>${esc(n.name)}</b><div style="font-size:12px;color:var(--ink-2)">${esc(n.note||"")}</div></td>
+      <td class="num">${esc(n.normPoint||"—")}</td>
+      <td>${n.lines.map(l=>esc(itemName(l.itemId))+` × ${l.qty}`).join("<br>")}</td>
+      <td class="num">${used||"—"}</td>
+      <td style="white-space:nowrap">
+        <button class="btn small ghost" data-edit="${n.id}" type="button">Изм.</button>
+        <button class="btn small ghost" data-del="${n.id}" type="button" style="color:var(--red)">Удалить</button>
+      </td></tr>`;
+  }).join("");
+
+  v.innerHTML = `
+  <div class="view-head"><h2>Нормы выдачи СИЗ</h2>
+    <span class="hint">норма назначается сотруднику в его карточке; по норме автозаполняется документ выдачи и строится отчёт обеспеченности</span></div>
+
+  <div class="panel">
+    <h3>${editing ? "Изменение нормы: " + esc(editing.name) : "Новая норма"}</h3>
+    <div class="form-row">
+      <div class="field"><label>Название нормы *</label><input id="n-name" value="${esc(editing?editing.name:"")}" placeholder="Тракторист (п. 44–46 ЕТН)"></div>
+      <div class="field"><label>Пункт норм</label><input id="n-np" value="${esc(editing?editing.normPoint||"":"")}" placeholder="п. 44–46 табл. 1 ЕТН"></div>
+      <div class="field"><label>Примечание</label><input id="n-note" value="${esc(editing?editing.note||"":"")}"></div>
+    </div>
+    <div class="lines"><table>
+      <thead><tr><th>Позиция СИЗ</th><th>Кол-во на срок носки</th><th></th></tr></thead>
+      <tbody id="n-lines-tbody"></tbody></table></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn" id="n-addline" type="button">+ Строка</button>
+      <div style="flex:1"></div>
+      ${editing?`<button class="btn" id="n-cancel" type="button">Отменить правку</button>`:""}
+      <button class="btn primary" id="n-save" type="button">${editing?"Сохранить норму":"Добавить норму"}</button>
+    </div>
+  </div>
+  ${db.norms.length ? `<div class="panel" style="padding:0;overflow-x:auto"><table>
+    <thead><tr><th>Норма</th><th>Пункт норм</th><th>Состав</th><th>Сотрудников</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`
+  : `<div class="empty">Норм пока нет. Составьте норму из позиций номенклатуры — например, по ЕТН (приказ № 767н) или локальным нормам предприятия.</div>`}`;
+
+  normLinesDraw();
+  document.getElementById("n-addline").onclick = () => { normLines.push({itemId:"",qty:1}); normLinesDraw(); };
+  const bc = document.getElementById("n-cancel");
+  if(bc) bc.onclick = () => { normEditId = null; normLines = []; render(); };
+  document.getElementById("n-save").onclick = () => {
+    const name = document.getElementById("n-name").value.trim();
+    const lines = normLines.filter(l=>l.itemId && l.qty>0).map(l=>({itemId:l.itemId, qty:l.qty}));
+    if(!name){ toast("Укажите название нормы","err"); return; }
+    if(!lines.length){ toast("Добавьте хотя бы одну позицию с количеством","err"); return; }
+    if(editing){
+      Object.assign(editing, { name, lines,
+        normPoint: document.getElementById("n-np").value.trim(),
+        note: document.getElementById("n-note").value.trim() });
+      toast("Норма сохранена");
+    }else{
+      db.seq.norm++;
+      db.norms.push({ id:uid(), num:db.seq.norm, name,
+        normPoint: document.getElementById("n-np").value.trim(),
+        note: document.getElementById("n-note").value.trim(), lines });
+      toast("Норма добавлена");
+    }
+    normEditId = null; normLines = [];
+    save(); render();
+  };
+  v.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => {
+    normEditId = b.dataset.edit; normLines = []; render();
+  });
+  v.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    const n = normById(b.dataset.del);
+    const used = db.employees.filter(e=>e.normId===n.id).length;
+    if(confirm(`Удалить норму «${n.name}»?${used?` Она назначена ${used} сотрудникам — привязка будет снята.`:""}`)){
+      db.norms = db.norms.filter(x=>x.id!==n.id);
+      for(const e of db.employees) if(e.normId===n.id) e.normId = "";
+      if(normEditId===n.id){ normEditId = null; normLines = []; }
+      save(); render(); toast("Норма удалена");
+    }
+  });
 }
