@@ -1,6 +1,6 @@
 "use strict";
 /* ============================================================
-   Учёт СИЗ — локальная программа v0.2.
+   Учёт СИЗ — локальная программа v0.3.
    Движок базы данных: SQLite (sql.js 1.12.0, загружается с CDN jsDelivr).
    Файл базы (.db) хранится на диске пользователя.
    ============================================================ */
@@ -10,13 +10,15 @@ const LS_OLD_KEY = "sizApp.v1";          // данные прототипа v0.1
 const IDB_NAME = "sizApp.handles";       // хранилище дескриптора файла БД
 
 const EMPTY_DB = () => ({
-  employees: [],   // {id,fio,tabnum,position,dept,pol,rost,hiredDate,sizeOdezhda,sizeObuv,sizeGolovnoi,sizeSIZOD,sizeRuk}
+  employees: [],   // {id,fio,tabnum,position,dept,pol,rost,hiredDate,sizeOdezhda,sizeObuv,sizeGolovnoi,sizeSIZOD,sizeRuk,normId}
   items: [],       // {id,name,type,unit,sockMonths,normPoint,model}
+  norms: [],       // {id,num,name,normPoint,note,lines:[{itemId,qty}]}
   receipts: [],    // {id,num,date,supplier,lines:[{itemId,size,qty,expiry}]}
   issues: [],      // {id,num,date,employeeId,manual,lines:[{itemId,size,qty,sockMonths,endDate}]}
   writeoffs: [],   // {id,num,date,scope:'stock'|'employee',employeeId,reason,lines:[{itemId,size,qty}]}
+  extensions: [],  // {id,num,date,docId,lineIdx,employeeId,itemId,size,addMonths,newEndDate,reason}
   settings: { warnDays: 30, orgName: "", okpo: "", responsible: "", storekeeper: "" },
-  seq: { receipt: 0, issue: 0, writeoff: 0 }
+  seq: { receipt: 0, issue: 0, writeoff: 0, norm: 0, ext: 0 }
 });
 
 let db = EMPTY_DB();
@@ -53,7 +55,14 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS employees(
   id TEXT PRIMARY KEY, fio TEXT, tabnum TEXT, position TEXT, dept TEXT,
   pol TEXT, rost TEXT, hiredDate TEXT,
-  sizeOdezhda TEXT, sizeObuv TEXT, sizeGolovnoi TEXT, sizeSIZOD TEXT, sizeRuk TEXT);
+  sizeOdezhda TEXT, sizeObuv TEXT, sizeGolovnoi TEXT, sizeSIZOD TEXT, sizeRuk TEXT, normId TEXT);
+CREATE TABLE IF NOT EXISTS norms(id TEXT PRIMARY KEY, num INTEGER, name TEXT, normPoint TEXT, note TEXT);
+CREATE TABLE IF NOT EXISTS norm_lines(
+  id TEXT PRIMARY KEY, docId TEXT, itemId TEXT, qty REAL);
+CREATE TABLE IF NOT EXISTS extensions(
+  id TEXT PRIMARY KEY, num INTEGER, date TEXT, docId TEXT, lineIdx INTEGER,
+  employeeId TEXT, itemId TEXT, size TEXT, addMonths REAL, newEndDate TEXT, reason TEXT);
+
 CREATE TABLE IF NOT EXISTS items(
   id TEXT PRIMARY KEY, name TEXT, type TEXT, unit TEXT, sockMonths INTEGER,
   normPoint TEXT, model TEXT);
@@ -68,7 +77,13 @@ CREATE TABLE IF NOT EXISTS writeoff_lines(
   id TEXT PRIMARY KEY, docId TEXT, itemId TEXT, size TEXT, qty REAL);
 `;
 
-function createSchema(){ sqdb.run(SCHEMA); }
+function createSchema(){
+  sqdb.run(SCHEMA);
+  // Миграция баз v0.2: добавить колонку normId, если её нет
+  const cols = sqdb.exec("PRAGMA table_info(employees)");
+  if(cols.length && !cols[0].values.some(r => r[1] === "normId"))
+    sqdb.run("ALTER TABLE employees ADD COLUMN normId TEXT");
+}
 
 /* ---------- Чтение БД -> память ---------- */
 function rowsOf(sql){
@@ -87,6 +102,9 @@ function loadFromSql(){
     lines: rowsOf(`SELECT itemId,size,qty,sockMonths,endDate FROM issue_lines WHERE docId='${i.id}'`)}));
   d.writeoffs = rowsOf("SELECT * FROM writeoffs").map(w => ({...w,
     lines: rowsOf(`SELECT itemId,size,qty FROM writeoff_lines WHERE docId='${w.id}'`)}));
+  d.norms = rowsOf("SELECT * FROM norms").map(n => ({...n,
+    lines: rowsOf(`SELECT itemId,qty FROM norm_lines WHERE docId='${n.id}'`)}));
+  d.extensions = rowsOf("SELECT * FROM extensions");
   for(const r of rowsOf("SELECT value FROM meta WHERE key='settings'")){
     try{ Object.assign(d.settings, JSON.parse(r.value)); }catch(e){}
   }
@@ -101,9 +119,16 @@ const escSql = v => v === null || v === undefined ? "NULL" : "'" + String(v).rep
 function syncToSql(){
   sqdb.run("BEGIN");
   try{
-    sqdb.run("DELETE FROM employees;DELETE FROM items;DELETE FROM receipts;DELETE FROM receipt_lines;DELETE FROM issues;DELETE FROM issue_lines;DELETE FROM writeoffs;DELETE FROM writeoff_lines;DELETE FROM meta;");
+    sqdb.run("DELETE FROM employees;DELETE FROM items;DELETE FROM receipts;DELETE FROM receipt_lines;DELETE FROM issues;DELETE FROM issue_lines;DELETE FROM writeoffs;DELETE FROM writeoff_lines;DELETE FROM norms;DELETE FROM norm_lines;DELETE FROM extensions;DELETE FROM meta;");
     for(const e of db.employees)
-      sqdb.run(`INSERT INTO employees VALUES(${[e.id,e.fio,e.tabnum||"",e.position||"",e.dept||"",e.pol||"",e.rost||"",e.hiredDate||"",e.sizeOdezhda||"",e.sizeObuv||"",e.sizeGolovnoi||"",e.sizeSIZOD||"",e.sizeRuk||""].map(escSql).join(",")})`);
+      sqdb.run(`INSERT INTO employees VALUES(${[e.id,e.fio,e.tabnum||"",e.position||"",e.dept||"",e.pol||"",e.rost||"",e.hiredDate||"",e.sizeOdezhda||"",e.sizeObuv||"",e.sizeGolovnoi||"",e.sizeSIZOD||"",e.sizeRuk||"",e.normId||""].map(escSql).join(",")})`);
+    for(const n of db.norms){
+      sqdb.run(`INSERT INTO norms VALUES(${[n.id,n.num,n.name,n.normPoint||"",n.note||""].map(escSql).join(",")})`);
+      for(const l of n.lines)
+        sqdb.run(`INSERT INTO norm_lines VALUES(${[uid(),n.id,l.itemId,l.qty].map(escSql).join(",")})`);
+    }
+    for(const x of db.extensions)
+      sqdb.run(`INSERT INTO extensions VALUES(${[x.id,x.num,x.date,x.docId,x.lineIdx,x.employeeId||"",x.itemId,x.size||"",x.addMonths,x.newEndDate||"",x.reason||""].map(escSql).join(",")})`);
     for(const i of db.items)
       sqdb.run(`INSERT INTO items VALUES(${[i.id,i.name,i.type,i.unit,i.sockMonths,i.normPoint||"",i.model||""].map(escSql).join(",")})`);
     for(const r of db.receipts){
