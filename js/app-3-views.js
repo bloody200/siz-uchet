@@ -271,7 +271,6 @@ function renderNorms(v){
   v.innerHTML = `
   <div class="view-head"><h2>Нормы выдачи СИЗ</h2>
     <span class="hint">норма назначается сотруднику в его карточке; по норме автозаполняется документ выдачи и строится отчёт обеспеченности</span></div>
-
   <div class="panel">
     <h3>${editing ? "Изменение нормы: " + esc(editing.name) : "Новая норма"}</h3>
     <div class="form-row">
