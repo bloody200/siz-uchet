@@ -302,3 +302,131 @@ function formPeriodSheet(rows, from, to){
   ${signRow("специалист по охране труда", "")}
   <div class="foot-note">Форма произвольная, содержит обязательные реквизиты первичного учетного документа (ст. 9 402-ФЗ). Сформирована ${fmtDate(todayISO())}.</div>`;
 }
+
+/* ---------- МБ-8: Акт на списание ---------- */
+function formMB8(w){
+  const body = w.lines.map((l, idx) => {
+    const it = itemById(l.itemId);
+    return `<tr>
+      <td style="text-align:center">${idx+1}</td>
+      <td>${esc(it ? it.name : "(удалено)")}${l.size ? `, р. ${esc(l.size)}` : ""}</td>
+      <td style="text-align:center"></td>
+      <td style="text-align:center">${esc(it ? it.unit : "")}</td>
+      <td style="text-align:center">${l.qty}</td>
+      <td>${esc(w.reason)}</td>
+    </tr>`;
+  }).join("");
+  const total = w.lines.reduce((s,l)=>s+(+l.qty||0),0);
+  const fromWhom = w.scope === "stock" ? "склад" : empName(w.employeeId);
+  return `
+  <div class="f-right">Типовая межотраслевая форма № МБ-8<br>Утверждена постановлением Госкомстата России<br>от 30.10.97 № 71а</div>
+  <table class="nb" style="margin-top:4px"><tr>
+    <td style="width:64%"></td>
+    <td style="width:36%;padding:0">
+      <table>
+        <tr><td style="width:60%">Форма по ОКУД</td><td style="text-align:center">0320004</td></tr>
+        <tr><td>Дата составления</td><td style="text-align:center">${fmtDate(w.date)}</td></tr>
+        <tr><td>Организация по ОКПО</td><td style="text-align:center">${okpoLine()}</td></tr>
+      </table>
+    </td>
+  </tr></table>
+  <div style="margin:4px 0">Организация <span class="u" style="min-width:340px">${orgLine()}</span></div>
+  <h3 class="tt" style="margin-top:6px">Акт № СП-${String(w.num).padStart(4,"0")}<br>на списание средств индивидуальной защиты</h3>
+  <div class="sub-c">от ${fmtDate(w.date)} · основание: документ списания СП-${String(w.num).padStart(4,"0")} · откуда: ${esc(fromWhom)}</div>
+  <table style="margin-top:6px">
+    <thead><tr>
+      <th style="width:4%">№ п/п</th>
+      <th>Наименование СИЗ</th>
+      <th style="width:9%">Номен-клатурный номер</th>
+      <th style="width:8%">Единица измерения</th>
+      <th style="width:7%">Коли-чество</th>
+      <th style="width:22%">Причина списания</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr>
+      <td colspan="4" style="text-align:right;font-weight:700">Итого</td>
+      <td style="text-align:center;font-weight:700">${total}</td><td></td>
+    </tr></tfoot>
+  </table>
+  <div style="margin-top:16px">Председатель комиссии:</div>
+  ${signRow("", respLine())}
+  <div style="margin-top:10px">Члены комиссии:</div>
+  ${signRow("", "")}
+  ${signRow("", "")}
+  <div class="foot-note">С 01.01.2013 форма МБ-8 не является обязательной (402-ФЗ) и применяется как удобный шаблон. Сформирована ${fmtDate(todayISO())}.</div>`;
+}
+
+/* ---------- Акт продления срока носки (произвольная форма) ---------- */
+function formExtAct(num){
+  const xs = db.extensions.filter(x=>x.num===num).sort((a,b)=>empName(a.employeeId).localeCompare(empName(b.employeeId),"ru"));
+  if(!xs.length) return "<p>Акт не найден</p>";
+  const body = xs.map((x, idx) => {
+    const issue = db.issues.find(i=>i.id===x.docId);
+    const oldEnd = addMonthsToISO(x.newEndDate, -x.addMonths);
+    return `<tr>
+      <td style="text-align:center">${idx+1}</td>
+      <td>${esc(empName(x.employeeId))}</td>
+      <td>${esc(itemName(x.itemId))}${x.size ? `, р. ${esc(x.size)}` : ""}</td>
+      <td style="text-align:center">${issue ? "ВД-"+String(issue.num).padStart(4,"0")+" от "+fmtDate(issue.date) : "—"}</td>
+      <td style="text-align:center">${fmtDate(oldEnd)}</td>
+      <td style="text-align:center">${x.addMonths} мес.</td>
+      <td style="text-align:center"><b>${fmtDate(x.newEndDate)}</b></td>
+    </tr>`;
+  }).join("");
+  return `
+  <h3 class="tt">Акт № ПР-${String(num).padStart(4,"0")}<br>продления срока носки средств индивидуальной защиты</h3>
+  <div class="sub-c">Организация: <span class="u" style="min-width:300px">${orgLine()}</span> · от ${fmtDate(xs[0].date)}</div>
+  <p style="font-size:12pt;margin:10px 0 6px">Комиссия проверила состояние выданных СИЗ и установила, что они пригодны
+  к дальнейшему использованию (п. 38 Правил № 766н). Основание: ${esc(xs[0].reason || "состояние годное")}.
+  Сроки носки продлены:</p>
+  <table style="margin-top:6px">
+    <thead><tr>
+      <th style="width:4%">№ п/п</th><th style="width:18%">Сотрудник</th><th>Наименование СИЗ</th>
+      <th style="width:16%">Документ выдачи</th><th style="width:10%">Прежний срок до</th>
+      <th style="width:9%">Продление</th><th style="width:10%">Новый срок до</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div style="margin-top:16px">Председатель комиссии:</div>
+  ${signRow("", respLine())}
+  <div style="margin-top:10px">Члены комиссии:</div>
+  ${signRow("", "")}
+  <div class="foot-note">Форма произвольная, содержит обязательные реквизиты первичного учетного документа (ст. 9 402-ФЗ). Сформирована ${fmtDate(todayISO())}.</div>`;
+}
+
+/* ---------- Заявка на закупку СИЗ (произвольная форма) ---------- */
+function formPurchaseRequest(rows, horizon){
+  const body = rows.filter(r=>r.buy>0).map((r, idx) => `<tr>
+    <td style="text-align:center">${idx+1}</td>
+    <td>${esc(r.name)}</td>
+    <td style="text-align:center">${esc(r.size||"—")}</td>
+    <td style="text-align:center">${esc(r.unit)}</td>
+    <td style="text-align:center"><b>${r.buy}</b></td>
+    <td style="text-align:center">${r.need}</td>
+    <td style="text-align:center">${r.stock}</td>
+    <td></td>
+  </tr>`).join("");
+  const total = rows.reduce((s,r)=>s+r.buy,0);
+  return `
+  <h3 class="tt">Заявка на закупку средств индивидуальной защиты</h3>
+  <div class="sub-c">Организация: <span class="u" style="min-width:300px">${orgLine()}</span> · от ${fmtDate(todayISO())}</div>
+  <p style="font-size:12pt;margin:10px 0 6px">Потребность рассчитана по нормам выдачи с учётом СИЗ на руках,
+  замены позиций, срок которых истекает в ближайшие ${horizon} дн., и складских остатков.</p>
+  <table style="margin-top:6px">
+    <thead><tr>
+      <th style="width:4%">№ п/п</th><th>Наименование СИЗ</th><th style="width:9%">Размер</th>
+      <th style="width:8%">Ед.</th><th style="width:9%">К закупке</th>
+      <th style="width:10%">Потребность</th><th style="width:9%">На складе</th><th style="width:14%">Примечание</th>
+    </tr></thead>
+    <tbody>${body || `<tr><td colspan="8" style="text-align:center">Закупка не требуется — потребность покрыта</td></tr>`}</tbody>
+    <tfoot><tr>
+      <td colspan="4" style="text-align:right;font-weight:700">Итого к закупке</td>
+      <td style="text-align:center;font-weight:700">${total}</td><td colspan="3"></td>
+    </tr></tfoot>
+  </table>
+  <div style="margin-top:16px">Составил:</div>
+  ${signRow("ответственный за выдачу СИЗ", respLine())}
+  <div style="margin-top:10px">Согласовал:</div>
+  ${signRow("специалист по охране труда", "")}
+  <div class="foot-note">Форма произвольная, содержит обязательные реквизиты первичного учетного документа (ст. 9 402-ФЗ). Сформирована ${fmtDate(todayISO())}.</div>`;
+}
