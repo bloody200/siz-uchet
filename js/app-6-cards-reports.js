@@ -63,10 +63,13 @@ function renderReports(v){
     <button type="button" data-tab="issues" class="${reportTab==="issues"?"active":""}">Выдача за период</button>
     <button type="button" data-tab="expiring" class="${reportTab==="expiring"?"active":""}">Истекающие сроки</button>
     <button type="button" data-tab="stock" class="${reportTab==="stock"?"active":""}">Остатки на складе</button>
+    <button type="button" data-tab="norms" class="${reportTab==="norms"?"active":""}">Обеспеченность нормами</button>
+    <button type="button" data-tab="needs" class="${reportTab==="needs"?"active":""}">Потребность (заявка)</button>
   </div>
   <div id="rep-body"></div>`;
   v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => switchReportTab(b.dataset.tab));
-  ({ issues:repIssues, expiring:repExpiring, stock:repStock })[reportTab](document.getElementById("rep-body"));
+  ({ issues:repIssues, expiring:repExpiring, stock:repStock,
+     norms:repNormCoverage, needs:repNeeds })[reportTab](document.getElementById("rep-body"));
 }
 
 function repIssues(el){
@@ -189,4 +192,122 @@ function repStock(el){
        ...rows.map(r=>[r.name,r.size,r.qty,fmtDate(r.exp),r.exp?statusOf(r.exp).label:"Без срока"])]);
     toast("CSV сохранён");
   };
+}
+
+// Размер СИЗ из карточки сотрудника по типу позиции
+function empSizeFor(e, it){
+  if(!e || !it) return "";
+  if(it.type==="Спецодежда") return e.sizeOdezhda||"";
+  if(it.type==="Спецобувь") return e.sizeObuv||"";
+  if(it.type==="Головной убор") return e.sizeGolovnoi||"";
+  if(it.type==="Средства защиты рук") return e.sizeRuk||"";
+  if(it.type==="СИЗОД") return e.sizeSIZOD||"";
+  return "";
+}
+
+function repNormCoverage(el){
+  const rows = [];
+  let withNorm = 0, fullOk = 0;
+  for(const e of db.employees){
+    const n = normById(e.normId);
+    if(!n) continue;
+    withNorm++;
+    let empOk = true;
+    for(const nl of n.lines){
+      const have = holdingsLines().filter(l=>l.empId===e.id && l.itemId===nl.itemId)
+        .reduce((s,l)=>s+l.left,0);
+      const def = Math.max(0, nl.qty - have);
+      if(def > 0) empOk = false;
+      rows.push({ emp:e.fio, norm:n.name, item:itemName(nl.itemId), req:nl.qty, have, def });
+    }
+    if(empOk) fullOk++;
+  }
+  const noNorm = db.employees.length - withNorm;
+  el.innerHTML = `
+  <div class="panel" style="margin-bottom:12px">
+    <b>Обеспеченность по нормам выдачи:</b> сотрудников с назначенной нормой — ${withNorm}
+    из ${db.employees.length}${noNorm?` (без нормы: ${noNorm})`:""},
+    полностью обеспечены — ${fullOk}.
+  </div>
+  <div class="filters"><button class="btn" id="nc-csv" type="button">В CSV</button></div>
+  <div class="panel" style="padding:0;overflow-x:auto"><table>
+    <thead><tr><th>Сотрудник</th><th>Норма</th><th>СИЗ</th><th>Положено</th><th>На руках</th><th>Не хватает</th><th>Статус</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr${r.def>0?' class="st-expired"':""}>
+      <td>${esc(r.emp)}</td><td style="font-size:13px">${esc(r.norm)}</td><td>${esc(r.item)}</td>
+      <td class="num">${r.req}</td><td class="num">${r.have}</td>
+      <td class="num">${r.def||""}</td>
+      <td>${r.def>0?'<span class="badge b-red">не обеспечен</span>':'<span class="badge b-green">ок</span>'}</td></tr>`).join("") ||
+      `<tr><td colspan="7" style="color:var(--ink-2)">Назначьте нормы сотрудникам — справочники «Нормы выдачи» → карточка сотрудника</td></tr>`}</tbody></table></div>`;
+  document.getElementById("nc-csv").onclick = () => {
+    downloadCSV("обеспеченность_нормами_СИЗ.csv",
+      [["Сотрудник","Норма","СИЗ","Положено","На руках","Не хватает"],
+       ...rows.map(r=>[r.emp,r.norm,r.item,r.req,r.have,r.def])]);
+    toast("CSV сохранён");
+  };
+}
+
+function repNeeds(el){
+  el.innerHTML = `
+  <div class="filters">
+    <div class="field"><label>Замена СИЗ, срок которых истекает в ближайшие</label>
+      <select id="nd-days" class="num"><option value="30">30 дней</option><option value="60" selected>60 дней</option><option value="90">90 дней</option></select></div>
+    <button class="btn primary" id="nd-run" type="button">Рассчитать</button>
+    <button class="btn" id="nd-csv" type="button">В CSV</button>
+    <button class="btn" id="nd-print" type="button">Печать заявки</button>
+  </div>
+  <div class="panel" style="padding:0;overflow-x:auto" id="nd-out"></div>`;
+  const run = () => {
+    const horizon = +document.getElementById("nd-days").value;
+    const need = new Map(); // itemId|size -> {name,unit,size,qty}
+    const addNeed = (itemId, size, q) => {
+      const k = key(itemId, size||"");
+      if(!need.has(k)){
+        const it = itemById(itemId);
+        need.set(k, { itemId, size:size||"", name:itemName(itemId), unit: it?it.unit:"шт", qty:0 });
+      }
+      need.get(k).qty += q;
+    };
+    // 1) дефицит по нормам (положено минус на руках)
+    for(const e of db.employees){
+      const n = normById(e.normId);
+      if(!n) continue;
+      for(const nl of n.lines){
+        const have = holdingsLines().filter(l=>l.empId===e.id && l.itemId===nl.itemId)
+          .reduce((s,l)=>s+l.left,0);
+        const def = nl.qty - have;
+        if(def > 0) addNeed(nl.itemId, empSizeFor(e, itemById(nl.itemId)), def);
+      }
+    }
+    // 2) замена истекающих по сроку носки
+    for(const l of holdingsLines()){
+      const d = daysUntil(l.endDate);
+      if(d !== null && d <= horizon) addNeed(l.itemId, l.size, l.left);
+    }
+    const stock = stockMap();
+    const rows = [...need.values()].map(r => ({
+      ...r, need:r.qty, stock: stock.get(key(r.itemId,r.size))||0,
+      buy: Math.max(0, r.qty - (stock.get(key(r.itemId,r.size))||0))
+    })).sort((a,b)=>a.name.localeCompare(b.name,"ru") || (a.size||"").localeCompare(b.size||""));
+    const totalBuy = rows.reduce((s,r)=>s+r.buy,0);
+    document.getElementById("nd-out").innerHTML = `<table>
+      <thead><tr><th>СИЗ</th><th>Размер</th><th>Ед.</th><th>Потребность</th><th>На складе</th><th>К закупке</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr${r.buy>0?' class="st-warn"':""}>
+        <td>${esc(r.name)}</td><td class="num">${esc(r.size||"—")}</td><td class="num">${esc(r.unit)}</td>
+        <td class="num">${r.need}</td><td class="num">${r.stock}</td>
+        <td class="num"><b>${r.buy||""}</b></td></tr>`).join("") ||
+        `<tr><td colspan="6" style="color:var(--ink-2)">Потребности нет: нормы не назначены и нет истекающих сроков в горизонте ${horizon} дн.</td></tr>`}</tbody>
+      ${rows.length?`<tfoot><tr><td colspan="5" style="padding:8px 10px;font-weight:700">Итого к закупке</td>
+        <td class="num" style="font-weight:700">${totalBuy}</td></tr></tfoot>`:""}</table>`;
+    document.getElementById("nd-csv").onclick = () => {
+      downloadCSV("потребность_СИЗ.csv",
+        [["СИЗ","Размер","Единица","Потребность","На складе","К закупке"],
+         ...rows.map(r=>[r.name,r.size,r.unit,r.need,r.stock,r.buy])]);
+      toast("CSV сохранён");
+    };
+    document.getElementById("nd-print").onclick = () => {
+      if(!rows.length){ toast("Потребности нет — нечего печатать","err"); return; }
+      doPrint(formPurchaseRequest(rows, horizon), "pg-land");
+    };
+  };
+  document.getElementById("nd-run").onclick = run; run();
 }
