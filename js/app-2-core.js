@@ -27,6 +27,16 @@ function itemById(id){ return db.items.find(i => i.id === id); }
 function empById(id){ return db.employees.find(e => e.id === id); }
 const itemName = id => { const i = itemById(id); return i ? i.name : "(удалено)"; };
 const empName = id => { const e = empById(id); return e ? e.fio : "(удалён)"; };
+function normById(id){ return db.norms.find(n => n.id === id); }
+const normName = id => { const n = normById(id); return n ? n.name : "—"; };
+// Прибавить месяцы к дате ISO (с защитой от переполнения месяца)
+function addMonthsToISO(iso, months){
+  if(!iso || !months) return iso;
+  const [y,m,d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1 + Number(months), d);
+  if(dt.getDate() !== d) dt.setDate(0); // напр. 31.01 + 1 мес -> последний день февраля
+  return toISO(dt);
+}
 
 /* Статус срока: expired / warn / ok */
 function statusOf(endISO){
@@ -63,13 +73,13 @@ function expiryMap(){
 function holdingsDetailed(){
   const groups = new Map(); // empId|item|size -> lines
   for(const i of db.issues){
-    for(const l of i.lines){
+    i.lines.forEach((l, idx) => {
       const k = i.employeeId + "|" + key(l.itemId,l.size);
       if(!groups.has(k)) groups.set(k, []);
       groups.get(k).push({ empId:i.employeeId, itemId:l.itemId, size:l.size||"",
         date:i.date, endDate:l.endDate, qty:+l.qty||0, left:+l.qty||0, docNum:i.num,
-        returns: [] });
-    }
+        docId:i.id, lineIdx:idx, returns: [], exts: [] });
+    });
   }
   for(const w of db.writeoffs){
     if(w.scope !== "employee") continue;
@@ -82,6 +92,15 @@ function holdingsDetailed(){
         const take = Math.min(ln.left, toCancel);
         ln.left -= take; toCancel -= take;
         ln.returns.push({ date:w.date, qty:take, docNum:w.num, reason:w.reason });
+      }
+    }
+  }
+  // Продления срока носки: применяются по привязке к строке выдачи (по возрастанию номера)
+  for(const x of [...db.extensions].sort((a,b)=>a.num-b.num)){
+    for(const lines of groups.values()) for(const ln of lines){
+      if(ln.docId === x.docId && ln.lineIdx === x.lineIdx){
+        ln.endDate = x.newEndDate;
+        ln.exts.push(x);
       }
     }
   }
@@ -160,9 +179,11 @@ const VIEWS = [
   {id:"dashboard", sec:"Обзор",    label:"Главная"},
   {id:"employees", sec:"Справочники", label:"Сотрудники"},
   {id:"items",     sec:"Справочники", label:"Номенклатура СИЗ"},
+  {id:"norms",     sec:"Справочники", label:"Нормы выдачи"},
   {id:"receipts",  sec:"Документы", label:"Поступление (приёмка)"},
   {id:"issues",    sec:"Документы", label:"Выдача СИЗ"},
   {id:"writeoffs", sec:"Документы", label:"Списание (возврат)"},
+  {id:"extensions",sec:"Документы", label:"Продление срока"},
   {id:"cards",     sec:"Учёт",     label:"Личные карточки"},
   {id:"reports",   sec:"Учёт",     label:"Отчёты и ведомости"},
   {id:"data",      sec:"Сервис",   label:"Данные и настройки"},
@@ -254,8 +275,8 @@ function bindDbBanner(v){
 /* ---------- корневой рендер ---------- */
 function render(){
   const v = document.getElementById("view");
-  ({ dashboard:renderDashboard, employees:renderEmployees, items:renderItems,
-     receipts:renderReceipts, issues:renderIssues, writeoffs:renderWriteoffs,
+  ({ dashboard:renderDashboard, employees:renderEmployees, items:renderItems, norms:renderNorms,
+     receipts:renderReceipts, issues:renderIssues, writeoffs:renderWriteoffs, extensions:renderExtensions,
      cards:renderCards, reports:renderReports, data:renderData }[currentView] || renderDashboard)(v);
   if(persistMode === "memory"){
     const banner = dbBannerHTML();
