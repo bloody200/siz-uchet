@@ -53,6 +53,25 @@ function renderData(v){
     </div>
   </div>
   <div class="panel">
+    <h3>Импорт из Excel (CSV)</h3>
+    <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
+      В Excel: «Файл → Сохранить как → CSV (разделители — точка с запятой)», затем загрузите файл сюда.
+      Уже существующие записи (сотрудники — по ФИО и таб. №, позиции — по наименованию) пропускаются.
+      Кодировка UTF-8 и Windows-1251 определяется автоматически.</p>
+    <div class="form-row">
+      <div class="field"><label>Что импортируем</label><select id="imp-kind">
+        <option value="employees">Сотрудники</option>
+        <option value="items">Номенклатура СИЗ</option>
+      </select></div>
+      <div class="field"><label>Файл CSV</label><input id="imp-file" type="file" accept=".csv,text/csv"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="imp-tpl-emp" type="button">Шаблон: сотрудники</button>
+      <button class="btn" id="imp-tpl-item" type="button">Шаблон: номенклатура</button>
+      <button class="btn primary" id="imp-run" type="button">Импортировать</button>
+    </div>
+  </div>
+  <div class="panel">
     <h3>Демонстрационные данные</h3>
     <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
       Заполнит базу примером: 3 сотрудника, 5 позиций СИЗ, поступления (включая просроченную партию),
@@ -118,6 +137,34 @@ function renderData(v){
     rd.readAsText(f);
     ev.target.value = "";
   });
+  document.getElementById("imp-tpl-emp").onclick = () => {
+    downloadCSV("шаблон_сотрудники.csv",
+      [["ФИО","Табельный №","Должность","Подразделение","Пол","Рост","Дата приёма","Размер одежды","Размер обуви","Головной убор","СИЗОД","СИЗ рук","Норма выдачи"],
+       ["Иванов Иван Иванович","0001","Тракторист","Мехотряд №1","мужской","182","12.03.2019","52-54","43","58","2","9","Тракторист (п. 44–46 ЕТН)"]]);
+  };
+  document.getElementById("imp-tpl-item").onclick = () => {
+    downloadCSV("шаблон_номенклатура.csv",
+      [["Наименование","Тип","Единица","Срок носки (мес)","Пункт норм","Модель"],
+       ["Костюм х/б","Спецодежда","шт","12","п. 44 табл. 1 ЕТН","ТУ 8572-001-…"]]);
+  };
+  document.getElementById("imp-run").onclick = () => {
+    const f = document.getElementById("imp-file").files[0];
+    if(!f){ toast("Выберите файл CSV","err"); return; }
+    const kind = document.getElementById("imp-kind").value;
+    const rd = new FileReader();
+    rd.onload = () => {
+      let text = rd.result;
+      if(text.includes("\uFFFD")){ // не UTF-8 — читаем как Windows-1251
+        const rd2 = new FileReader();
+        rd2.onload = () => importCSV(kind, rd2.result);
+        rd2.readAsText(f, "windows-1251");
+        return;
+      }
+      importCSV(kind, text);
+    };
+    rd.readAsText(f, "utf-8");
+    document.getElementById("imp-file").value = "";
+  };
   document.getElementById("s-demo").onclick = () => {
     if(!confirm("Текущие данные будут заменены демонстрационными. Продолжить?")) return;
     loadDemo(); save(); showView("dashboard"); toast("Демо-данные загружены");
@@ -125,6 +172,74 @@ function renderData(v){
   document.getElementById("s-wipe").onclick = () => {
     if(confirm("Удалить ВСЕ данные безвозвратно?")){ db = EMPTY_DB(); save(); render(); updateWarnBadge(); toast("База очищена"); }
   };
+}
+
+/* ---------- Импорт CSV (Excel) ---------- */
+function splitCSVLine(line, delim){
+  const out = []; let cur = "", inQ = false;
+  for(let i=0;i<line.length;i++){
+    const c = line[i];
+    if(inQ){
+      if(c === '"'){ if(line[i+1] === '"'){ cur += '"'; i++; } else inQ = false; }
+      else cur += c;
+    }else{
+      if(c === '"') inQ = true;
+      else if(c === delim){ out.push(cur.trim()); cur = ""; }
+      else cur += c;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+function parseCSV(text){
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim() !== "");
+  if(!lines.length) return [];
+  const delim = lines[0].includes(";") ? ";" : ",";
+  return lines.map(l => splitCSVLine(l, delim));
+}
+function parseRuDate(s){
+  s = (s||"").trim();
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if(m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+function importCSV(kind, text){
+  const rows = parseCSV(text);
+  if(rows.length < 2){ toast("Файл пуст или нет строк данных","err"); return; }
+  const data = rows.slice(1); // первая строка — заголовок
+  let added = 0, skipped = 0;
+  if(kind === "employees"){
+    for(const r of data){
+      const fio = r[0]||"";
+      if(!fio){ skipped++; continue; }
+      const tabnum = r[1]||"";
+      if(db.employees.some(e => e.fio.toLowerCase()===fio.toLowerCase() && (e.tabnum||"")===tabnum)){ skipped++; continue; }
+      const normTitle = (r[12]||"").trim().toLowerCase();
+      const norm = normTitle ? db.norms.find(n => n.name.trim().toLowerCase() === normTitle) : null;
+      db.employees.push({ id:uid(), fio, tabnum,
+        position: r[2]||"", dept: r[3]||"",
+        pol: (r[4]||"").toLowerCase().startsWith("жен") ? "женский" : (r[4]||"").toLowerCase().startsWith("муж") ? "мужской" : "",
+        rost: r[5]||"", hiredDate: parseRuDate(r[6]),
+        sizeOdezhda: r[7]||"", sizeObuv: r[8]||"", sizeGolovnoi: r[9]||"",
+        sizeSIZOD: r[10]||"", sizeRuk: r[11]||"",
+        normId: norm ? norm.id : "" });
+      added++;
+    }
+  }else{
+    for(const r of data){
+      const name = r[0]||"";
+      if(!name){ skipped++; continue; }
+      if(db.items.some(i => i.name.toLowerCase()===name.toLowerCase())){ skipped++; continue; }
+      const sock = +r[3]||0;
+      if(sock < 1){ skipped++; continue; }
+      db.items.push({ id:uid(), name,
+        type: ITEM_TYPES.includes(r[1]) ? r[1] : "Прочее",
+        unit: r[2]||"шт", sockMonths: sock, normPoint: r[4]||"", model: r[5]||"" });
+      added++;
+    }
+  }
+  save(); render(); updateWarnBadge();
+  toast(`Импортировано: ${added}; пропущено (дубли/ошибки): ${skipped}`, added ? "" : "warn");
 }
 
 function loadDemo(){
@@ -145,6 +260,12 @@ function loadDemo(){
   const i4={id:uid(),name:"Каска защитная",type:"Головной убор",unit:"шт",sockMonths:24,normPoint:"п. 44 табл. 1 ЕТН",model:"РОСОМЗ СОМЗ-55"};
   const i5={id:uid(),name:"Маска сварщика",type:"Средства защиты глаз",unit:"шт",sockMonths:12,normPoint:"п. 89 табл. 1 ЕТН",model:"НН-10 «Горизонт»"};
   db.items.push(i1,i2,i3,i4,i5);
+
+  db.seq.norm = 1;
+  const n1 = { id:uid(), num:1, name:"Тракторист (п. 44–46 ЕТН)", normPoint:"п. 44–46 табл. 1 ЕТН", note:"",
+    lines:[{itemId:i1.id,qty:1},{itemId:i2.id,qty:1},{itemId:i3.id,qty:12}] };
+  db.norms.push(n1);
+  e1.normId = n1.id;
 
   const d = n => toISO(new Date(Date.now() + n*86400000));
   db.seq.receipt = 2;
