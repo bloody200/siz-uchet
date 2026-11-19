@@ -75,7 +75,7 @@ function renderData(v){
     <h3>Демонстрационные данные</h3>
     <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
       Заполнит базу примером: 3 сотрудника, 5 позиций СИЗ, поступления (включая просроченную партию),
-      выдачи с разными сроками — сразу видно цветовую индикацию, блокировки и можно напечатать все формы.</p>
+      выдачи с разными сроками — сразу видно цветовая индикация, блокировки и можно напечатать все формы.</p>
     <button class="btn" id="s-demo" type="button">Загрузить демо-данные</button>
   </div>
   <div class="panel" style="border-color:var(--red)">
@@ -154,7 +154,7 @@ function renderData(v){
     const rd = new FileReader();
     rd.onload = () => {
       let text = rd.result;
-      if(text.includes("")){ // не UTF-8 — читаем как Windows-1251
+      if(text.includes(String.fromCharCode(0xFFFD))){ // не UTF-8 — читаем как Windows-1251
         const rd2 = new FileReader();
         rd2.onload = () => importCSV(kind, rd2.result);
         rd2.readAsText(f, "windows-1251");
@@ -192,7 +192,8 @@ function splitCSVLine(line, delim){
   return out;
 }
 function parseCSV(text){
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim() !== "");
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // срезаем BOM
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
   if(!lines.length) return [];
   const delim = lines[0].includes(";") ? ";" : ",";
   return lines.map(l => splitCSVLine(l, delim));
