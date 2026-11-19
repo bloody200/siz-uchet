@@ -3,11 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Учёт СИЗ — прототип</title>
+<title>Учёт СИЗ — локальная программа</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231b1b18'/%3E%3Cpath d='M16 6c-4 0-7 3-7 7v1h14v-1c0-4-3-7-7-7z' fill='%23fe5000'/%3E%3Crect x='8' y='16' width='16' height='3' rx='1' fill='%23fdfdfb'/%3E%3Crect x='8' y='22' width='10' height='3' rx='1' fill='%23fe5000'/%3E%3C/svg%3E">
 <style>
 :root{
-  /* Палитра: высокий контраст + safety orange */
   --bg:#f2f2ef;
   --panel:#fdfdfb;
   --ink:#1b1b18;
@@ -73,6 +72,25 @@ main{min-width:0;display:flex;flex-direction:column}
 .warn-badge:hover{transform:translateY(-1px)}
 .warn-badge.show{display:inline-flex}
 #view{padding:24px 28px 60px;max-width:1180px;width:100%}
+
+/* ===== Статус базы данных ===== */
+.db-status{
+  display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;
+  padding:4px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);
+  background:#fff;white-space:nowrap;
+}
+.db-status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
+.db-status.ok{border-color:var(--green);color:var(--green);background:var(--green-soft)}
+.db-status.ok::before{background:var(--green)}
+.db-status.off{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+.db-status.off::before{background:var(--red)}
+.db-banner{
+  border:1px solid var(--line-strong);border-left:3px solid var(--amber);border-radius:var(--radius);
+  background:var(--amber-soft);padding:14px 16px;margin-bottom:18px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+}
+.db-banner b{font-size:14px}
+.db-banner p{font-size:13px;color:var(--ink-2);flex:1;min-width:240px}
 
 /* ===== Типовые блоки ===== */
 .view-head{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap}
@@ -173,7 +191,7 @@ tr.st-warn:hover td{background:#f7e6c8}
 .modal-backdrop{position:absolute;inset:0;background:rgba(20,20,18,.45)}
 .modal{
   position:relative;background:var(--panel);border:1px solid var(--line-strong);border-radius:6px;
-  width:min(560px,calc(100vw - 40px));max-height:calc(100dvh - 60px);overflow-y:auto;
+  width:min(620px,calc(100vw - 40px));max-height:calc(100dvh - 60px);overflow-y:auto;
   padding:22px 24px;box-shadow:0 20px 60px rgba(20,20,18,.25);
 }
 .modal h3{font-size:17px;font-weight:700;margin-bottom:16px}
@@ -207,20 +225,43 @@ tr.st-warn:hover td{background:#f7e6c8}
 .filters{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
 .filters .field{margin-bottom:0;min-width:150px}
 
-/* ===== Личная карточка (печать) ===== */
-.card-doc{background:#fff;border:1px solid var(--line-strong);border-radius:var(--radius);padding:26px 30px;max-width:820px}
-.card-doc h3{text-align:center;font-size:15px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
-.card-doc .sub{text-align:center;font-size:12px;color:var(--ink-2);margin-bottom:16px}
-.card-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;font-size:13px;margin-bottom:16px}
-.card-meta b{font-weight:650}
+/* ===== Печатные формы: предпросмотр на экране ===== */
+.card-doc{background:#fff;border:1px solid var(--line-strong);border-radius:var(--radius);padding:26px 30px;max-width:900px;margin-bottom:20px}
+.card-doc.land{max-width:1180px}
+
+/* ===== Оформление печатных форм (общее для экрана и печати) ===== */
+.doc{font-family:"Times New Roman",Times,serif;color:#000;font-size:12px;line-height:1.35}
+.doc .f-right{text-align:right;font-size:10px;line-height:1.3}
+.doc .f-center{text-align:center}
+.doc h3.tt{text-align:center;font-size:14px;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px}
+.doc .sub-c{text-align:center;font-size:11px;margin-bottom:8px}
+.doc table{border-collapse:collapse;width:100%}
+.doc table td,.doc table th{border:1px solid #000;padding:3px 5px;font-size:11px;vertical-align:top}
+.doc table th{text-align:center;font-weight:700;font-size:10.5px;text-transform:none;letter-spacing:0;color:#000;white-space:normal}
+.doc .nb td{border:0}
+.doc .u{border-bottom:1px solid #000;display:inline-block;min-width:60px;padding:0 4px}
+.doc .sign-row{display:flex;gap:18px;align-items:flex-end;margin-top:14px;font-size:11px}
+.doc .sign-row .w{flex:1}
+.doc .cap{font-size:9px;text-align:center;border-top:1px solid #000;margin-top:1px}
+.doc .foot-note{font-size:9.5px;margin-top:8px}
+.doc .nob{font-weight:400}
+
+/* ===== Печать ===== */
+#print-root{display:none}
 @media print{
   body{background:#fff}
-  aside,.topbar,.no-print{display:none!important}
-  #app{display:block}
-  #view{padding:0;max-width:none}
-  .card-doc{border:0;padding:0;max-width:none}
+  #app,#toast-root,#modal-root,.no-print{display:none!important}
+  #print-root{display:block!important}
+  .doc{--x:1}
+  .doc table td,.doc table th{font-size:9.5px;padding:2px 4px}
+  .doc h3.tt{font-size:12.5px}
   tr{break-inside:avoid}
 }
+@page pg-portrait{size:A4 portrait;margin:12mm}
+@page pg-land{size:A4 landscape;margin:10mm}
+.pg-portrait{page:pg-portrait}
+.pg-land{page:pg-land}
+.page-break{break-before:page}
 
 @media (max-width:900px){
   #app{grid-template-columns:1fr}
@@ -235,14 +276,15 @@ tr.st-warn:hover td{background:#f7e6c8}
 <body>
 <div id="app">
   <aside>
-    <div class="brand"><b>Учёт СИЗ</b><span>прототип v0.1</span></div>
+    <div class="brand"><b>Учёт СИЗ</b><span>локальная v0.2 · SQLite</span></div>
     <nav id="nav"></nav>
-    <div class="foot">Данные хранятся локально<br>в этом браузере</div>
+    <div class="foot" id="db-foot">База данных не подключена</div>
   </aside>
   <main>
     <div class="topbar">
       <h1 id="topbar-title">Главная</h1>
       <div class="spacer"></div>
+      <span class="db-status off" id="db-status">База не подключена</span>
       <button class="warn-badge" id="warn-badge" type="button"></button>
     </div>
     <div id="view"></div>
@@ -250,1024 +292,13 @@ tr.st-warn:hover td{background:#f7e6c8}
 </div>
 <div id="modal-root"></div>
 <div id="toast-root"></div>
-<script>
-"use strict";
-/* ============================================================
-   Учёт СИЗ — локальный прототип.
-   Данные: localStorage (ключ sizApp.v1).
-   ============================================================ */
-
-const STORE_KEY = "sizApp.v1";
-
-const EMPTY_DB = () => ({
-  employees: [],   // {id,fio,tabnum,position,dept,sizeOdezhda,sizeObuv,sizeGolovnoi}
-  items: [],       // {id,name,type,unit,sockMonths}
-  receipts: [],    // {id,num,date,supplier,lines:[{itemId,size,qty,expiry}]}
-  issues: [],      // {id,num,date,employeeId,manual,lines:[{itemId,size,qty,sockMonths,endDate}]}
-  writeoffs: [],   // {id,num,date,scope:'stock'|'employee',employeeId,reason,lines:[{itemId,size,qty}]}
-  settings: { warnDays: 30, orgName: "" },
-  seq: { receipt: 0, issue: 0, writeoff: 0 }
-});
-
-let db = load();
-
-function load(){
-  try{
-    const raw = localStorage.getItem(STORE_KEY);
-    if(!raw) return EMPTY_DB();
-    const d = JSON.parse(raw);
-    return Object.assign(EMPTY_DB(), d, { settings: Object.assign(EMPTY_DB().settings, d.settings||{}) });
-  }catch(e){ return EMPTY_DB(); }
-}
-function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
-
-/* ---------- утилиты ---------- */
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const todayISO = () => { const d = new Date(); return toISO(d); };
-const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-const fmtDate = iso => {
-  if(!iso) return "—";
-  const [y,m,d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-};
-const daysUntil = iso => {
-  if(!iso) return null;
-  const t = new Date(); t.setHours(0,0,0,0);
-  const d = new Date(iso + "T00:00:00");
-  return Math.round((d - t) / 86400000);
-};
-// Дата окончания = дата выдачи + срок (мес.) − 1 день
-function endDateOf(issueDateISO, months){
-  if(!issueDateISO || !months) return "";
-  const [y,m,d] = issueDateISO.split("-").map(Number);
-  const dt = new Date(y, m - 1 + Number(months), d);
-  dt.setDate(dt.getDate() - 1);
-  return toISO(dt);
-}
-function itemById(id){ return db.items.find(i => i.id === id); }
-function empById(id){ return db.employees.find(e => e.id === id); }
-const itemName = id => { const i = itemById(id); return i ? i.name : "(удалено)"; };
-const empName = id => { const e = empById(id); return e ? e.fio : "(удалён)"; };
-
-/* Статус срока: expired / warn / ok */
-function statusOf(endISO){
-  const n = daysUntil(endISO);
-  if(n === null) return { code:"none", label:"Без срока", cls:"b-gray" };
-  if(n < 0) return { code:"expired", label:"Просрочено", cls:"b-red" };
-  if(n <= db.settings.warnDays) return { code:"warn", label:`Истекает (${n} дн.)`, cls:"b-amber" };
-  return { code:"ok", label:`Действует (${n} дн.)`, cls:"b-green" };
-}
-
-/* ---------- учётные вычисления ---------- */
-const key = (itemId,size) => itemId + "|" + (size||"");
-
-// Остаток на складе по позициям
-function stockMap(){
-  const m = new Map();
-  const add = (k,q) => m.set(k,(m.get(k)||0)+q);
-  for(const r of db.receipts) for(const l of r.lines) add(key(l.itemId,l.size), +l.qty||0);
-  for(const i of db.issues) if(!i.manual) for(const l of i.lines) add(key(l.itemId,l.size), -(+l.qty||0));
-  for(const w of db.writeoffs) if(w.scope==="stock") for(const l of w.lines) add(key(l.itemId,l.size), -(+l.qty||0));
-  return m;
-}
-// Срок годности по позиции — из последнего поступления
-function expiryMap(){
-  const m = new Map();
-  const docs = [...db.receipts].sort((a,b)=> a.date.localeCompare(b.date) || a.num - b.num);
-  for(const r of docs) for(const l of r.lines){
-    if(l.expiry) m.set(key(l.itemId,l.size), l.expiry);
-  }
-  return m;
-}
-// СИЗ у сотрудников: по строкам выдачи с FIFO-списанием
-function holdingsLines(){
-  const groups = new Map(); // empId|item|size -> {lines:[{date,endDate,qty,left,docNum}], }
-  for(const i of db.issues){
-    for(const l of i.lines){
-      const k = i.employeeId + "|" + key(l.itemId,l.size);
-      if(!groups.has(k)) groups.set(k, []);
-      groups.get(k).push({ empId:i.employeeId, itemId:l.itemId, size:l.size||"",
-        date:i.date, endDate:l.endDate, qty:+l.qty||0, left:+l.qty||0, docNum:i.num });
-    }
-  }
-  for(const w of db.writeoffs){
-    if(w.scope !== "employee") continue;
-    for(const l of w.lines){
-      const k = w.employeeId + "|" + key(l.itemId,l.size);
-      let toCancel = +l.qty||0;
-      const lines = (groups.get(k)||[]).sort((a,b)=> a.date.localeCompare(b.date));
-      for(const ln of lines){
-        if(toCancel <= 0) break;
-        const take = Math.min(ln.left, toCancel);
-        ln.left -= take; toCancel -= take;
-      }
-    }
-  }
-  const out = [];
-  for(const lines of groups.values()) for(const ln of lines) if(ln.left > 0) out.push(ln);
-  return out;
-}
-// Сводно: сколько числится за сотрудником по позиции
-function holdingQty(empId, itemId, size){
-  return holdingsLines()
-    .filter(l => l.empId===empId && l.itemId===itemId && (l.size||"")===(size||""))
-    .reduce((s,l)=> s + l.left, 0);
-}
-
-/* ---------- тосты ---------- */
-function toast(msg, kind){
-  const root = document.getElementById("toast-root");
-  const el = document.createElement("div");
-  el.className = "toast" + (kind==="err" ? " err" : kind==="warn" ? " warn" : "");
-  el.textContent = msg;
-  root.appendChild(el);
-  setTimeout(()=>{ el.style.opacity="0"; el.style.transition="opacity .25s"; setTimeout(()=>el.remove(),260); }, 3600);
-}
-
-/* ---------- модальное окно ---------- */
-function openModal(title, bodyHTML, onOk, okLabel){
-  const root = document.getElementById("modal-root");
-  root.innerHTML = `
-    <div class="modal-backdrop" data-close></div>
-    <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
-      <h3>${esc(title)}</h3>
-      <div class="modal-body">${bodyHTML}</div>
-      <div class="actions">
-        <button class="btn" type="button" data-close>Отмена</button>
-        <button class="btn primary" type="button" data-ok>${esc(okLabel||"Сохранить")}</button>
-      </div>
-    </div>`;
-  root.classList.add("open");
-  const close = () => { root.classList.remove("open"); root.innerHTML=""; document.removeEventListener("keydown", onKey); };
-  const onKey = e => { if(e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  root.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", close));
-  root.querySelector("[data-ok]").addEventListener("click", () => {
-    const res = onOk(root.querySelector(".modal"));
-    if(res !== false) close();
-  });
-  const first = root.querySelector("input,select");
-  if(first) first.focus();
-  return close;
-}
-
-/* ---------- CSV ---------- */
-function downloadCSV(filename, rows){
-  const q = v => { const s = String(v ?? ""); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
-  const csv = rows.map(r => r.map(q).join(";")).join("\r\n");
-  const blob = new Blob(["\uFEFF" + csv], {type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = filename; a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-/* ---------- навигация ---------- */
-const VIEWS = [
-  {id:"dashboard", sec:"Обзор",    label:"Главная"},
-  {id:"employees", sec:"Справочники", label:"Сотрудники"},
-  {id:"items",     sec:"Справочники", label:"Номенклатура СИЗ"},
-  {id:"receipts",  sec:"Документы", label:"Поступление (приёмка)"},
-  {id:"issues",    sec:"Документы", label:"Выдача СИЗ"},
-  {id:"writeoffs", sec:"Документы", label:"Списание"},
-  {id:"cards",     sec:"Учёт",     label:"Личные карточки"},
-  {id:"reports",   sec:"Учёт",     label:"Отчёты"},
-  {id:"data",      sec:"Сервис",   label:"Данные и настройки"},
-];
-let currentView = "dashboard";
-
-function renderNav(){
-  const nav = document.getElementById("nav");
-  let html = "", lastSec = null;
-  for(const v of VIEWS){
-    if(v.sec !== lastSec){ html += `<div class="nav-sec">${esc(v.sec)}</div>`; lastSec = v.sec; }
-    html += `<button type="button" data-view="${v.id}" class="${v.id===currentView?"active":""}">${esc(v.label)}</button>`;
-  }
-  nav.innerHTML = html;
-  nav.querySelectorAll("button[data-view]").forEach(b =>
-    b.addEventListener("click", () => showView(b.dataset.view)));
-}
-function showView(id){
-  currentView = id;
-  const meta = VIEWS.find(v=>v.id===id);
-  document.getElementById("topbar-title").textContent = meta ? meta.label : "";
-  renderNav(); render(); updateWarnBadge();
-  if(location.hash !== "#"+id) history.replaceState(null,"","#"+id);
-}
-
-/* Бейдж предупреждений в шапке */
-function updateWarnBadge(){
-  const badge = document.getElementById("warn-badge");
-  const exp = holdingsLines().filter(l => statusOf(l.endDate).code === "expired");
-  const stockExp = [...expiryMap().entries()].filter(([k,dt]) => (stockMap().get(k)||0) > 0 && statusOf(dt).code === "expired");
-  const total = exp.length + stockExp.length;
-  if(total > 0){
-    badge.classList.add("show");
-    badge.textContent = `Просрочено: ${total} поз. — использовать нельзя`;
-    badge.onclick = () => { showView("reports"); setTimeout(()=>switchReportTab("expiring"),0); };
-  }else{
-    badge.classList.remove("show");
-  }
-}
-
-/* ---------- корневой рендер ---------- */
-function render(){
-  const v = document.getElementById("view");
-  ({ dashboard:renderDashboard, employees:renderEmployees, items:renderItems,
-     receipts:renderReceipts, issues:renderIssues, writeoffs:renderWriteoffs,
-     cards:renderCards, reports:renderReports, data:renderData }[currentView] || renderDashboard)(v);
-}
-</script>
-<script>
-/* ================= ГЛАВНАЯ ================= */
-function renderDashboard(v){
-  const stock = stockMap();
-  const stockTotal = [...stock.values()].reduce((s,q)=>s+q,0);
-  const holdings = holdingsLines();
-  const holdTotal = holdings.reduce((s,l)=>s+l.left,0);
-
-  const expHold = holdings.filter(l => statusOf(l.endDate).code==="expired");
-  const warnHold = holdings.filter(l => statusOf(l.endDate).code==="warn");
-  const expMap = expiryMap();
-  const expStock = [...expMap.entries()].filter(([k,dt]) => (stock.get(k)||0)>0 && statusOf(dt).code==="expired");
-  const warnStock = [...expMap.entries()].filter(([k,dt]) => (stock.get(k)||0)>0 && statusOf(dt).code==="warn");
-
-  const alertRows = (list, isStock) => list.slice(0,6).map(l => {
-    const st = statusOf(isStock ? l[1] : l.endDate);
-    const name = isStock ? itemName(l[0].split("|")[0]) : itemName(l.itemId);
-    const who = isStock ? "склад" : empName(l.empId);
-    return `<tr><td>${esc(name)}</td><td>${esc(who)}</td>
-      <td class="num">${fmtDate(isStock ? l[1] : l.endDate)}</td>
-      <td><span class="badge ${st.cls}">${st.label}</span></td></tr>`;
-  }).join("");
-
-  v.innerHTML = `
-  <div class="grid-stats">
-    <div class="stat"><div class="v num">${db.employees.length}</div><div class="l">Сотрудников</div></div>
-    <div class="stat"><div class="v num">${db.items.length}</div><div class="l">Позиций номенклатуры</div></div>
-    <div class="stat"><div class="v num">${stockTotal}</div><div class="l">Единиц на складе</div></div>
-    <div class="stat"><div class="v num">${holdTotal}</div><div class="l">Выдано сотрудникам</div></div>
-    <div class="stat"><div class="v num" style="color:var(--red)">${expHold.length + expStock.length}</div><div class="l">Просрочено</div></div>
-    <div class="stat"><div class="v num" style="color:var(--amber)">${warnHold.length + warnStock.length}</div><div class="l">Истекает ≤ ${db.settings.warnDays} дн.</div></div>
-  </div>
-
-  ${expHold.length + expStock.length ? `
-  <div class="alert">
-    <h4>Просроченные СИЗ — использовать нельзя</h4>
-    <p>Требуется списание и замена. Полный список — в отчёте «Истекающие сроки».</p>
-    <table><thead><tr><th>Позиция</th><th>Где</th><th>Срок истёк</th><th>Статус</th></tr></thead>
-    <tbody>${alertRows(expHold,false)}${alertRows(expStock,true)}</tbody></table>
-  </div>` : ""}
-
-  ${warnHold.length + warnStock.length ? `
-  <div class="alert amber">
-    <h4>Срок истекает в ближайшие ${db.settings.warnDays} дней</h4>
-    <p>Запланируйте выдачу новых СИЗ.</p>
-    <table><thead><tr><th>Позиция</th><th>Где</th><th>Срок до</th><th>Статус</th></tr></thead>
-    <tbody>${alertRows(warnHold,false)}${alertRows(warnStock,true)}</tbody></table>
-  </div>` : ""}
-
-  ${!db.items.length ? `
-  <div class="empty">
-    База пустая. Начните с раздела <b>«Данные и настройки»</b> — там можно загрузить демонстрационный набор,
-    либо заполните справочники «Номенклатура СИЗ» и «Сотрудники» вручную.
-  </div>` : ""}
-
-  <div class="panel">
-    <h3>Порядок работы</h3>
-    <table>
-      <tbody>
-        <tr><td class="num" style="width:30px">1</td><td>Заполните справочники: номенклатура СИЗ (со сроками носки) и сотрудники (с размерами).</td></tr>
-        <tr><td class="num">2</td><td>Оформите <b>Поступление</b> — приёмку СИЗ на склад (с датами сроков годности).</td></tr>
-        <tr><td class="num">3</td><td>Оформляйте <b>Выдачу</b> — программа сама рассчитает срок окончания и не даст выдать просроченное.</td></tr>
-        <tr><td class="num">4</td><td>Следите за главной страницей и отчётом <b>«Истекающие сроки»</b> — просроченное списывайте документом «Списание».</td></tr>
-      </tbody>
-    </table>
-  </div>`;
-}
-
-/* ================= СОТРУДНИКИ ================= */
-function renderEmployees(v){
-  const rows = db.employees.map(e => {
-    const hold = holdingsLines().filter(l=>l.empId===e.id);
-    const worst = hold.some(l=>statusOf(l.endDate).code==="expired") ? "expired"
-                : hold.some(l=>statusOf(l.endDate).code==="warn") ? "warn" : "";
-    return `<tr${worst?` class="st-${worst}"`:""}>
-      <td><b>${esc(e.fio)}</b></td>
-      <td class="num">${esc(e.tabnum||"—")}</td>
-      <td>${esc(e.position||"")}</td>
-      <td>${esc(e.dept||"")}</td>
-      <td class="num">${esc(e.sizeOdezhda||"—")} / ${esc(e.sizeObuv||"—")} / ${esc(e.sizeGolovnoi||"—")}</td>
-      <td class="num">${hold.reduce((s,l)=>s+l.left,0)||"—"}</td>
-      <td style="white-space:nowrap">
-        <button class="btn small ghost" data-card="${e.id}" type="button">Карточка</button>
-        <button class="btn small ghost" data-edit="${e.id}" type="button">Изм.</button>
-        <button class="btn small ghost" data-del="${e.id}" type="button" style="color:var(--red)">Удалить</button>
-      </td></tr>`;
-  }).join("");
-
-  v.innerHTML = `
-  <div class="view-head"><h2>Сотрудники</h2>
-    <span class="hint">размеры: одежда / обувь / головной убор</span>
-    <div class="spacer" style="flex:1"></div>
-    <button class="btn primary" id="add-emp" type="button">+ Добавить сотрудника</button>
-  </div>
-  ${db.employees.length ? `<div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>ФИО</th><th>Таб. №</th><th>Должность</th><th>Подразделение</th><th>Размеры (од/об/гол)</th><th>СИЗ на руках</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`
-  : `<div class="empty">Сотрудников пока нет. Добавьте первого — понадобятся ФИО, должность и размеры.</div>`}`;
-
-  document.getElementById("add-emp").onclick = () => empForm(null);
-  v.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => empForm(b.dataset.edit));
-  v.querySelectorAll("[data-card]").forEach(b => b.onclick = () => { showView("cards"); cardEmployeeId = b.dataset.card; setTimeout(render,0); });
-  v.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
-    const e = empById(b.dataset.del);
-    if(confirm(`Удалить сотрудника «${e.fio}»? Документы выдачи останутся в истории.`)){
-      db.employees = db.employees.filter(x=>x.id!==e.id); save(); render();
-      toast("Сотрудник удалён");
-    }
-  });
-}
-
-function empForm(id){
-  const e = id ? empById(id) : {fio:"",tabnum:"",position:"",dept:"",sizeOdezhda:"",sizeObuv:"",sizeGolovnoi:""};
-  openModal(id ? "Изменить сотрудника" : "Новый сотрудник", `
-    <div class="field"><label>ФИО *</label><input id="f-fio" value="${esc(e.fio)}"></div>
-    <div class="form-row">
-      <div class="field"><label>Табельный №</label><input id="f-tab" class="num" value="${esc(e.tabnum)}"></div>
-      <div class="field"><label>Должность</label><input id="f-pos" value="${esc(e.position)}"></div>
-    </div>
-    <div class="field"><label>Подразделение</label><input id="f-dept" value="${esc(e.dept)}"></div>
-    <div class="form-row">
-      <div class="field"><label>Размер одежды</label><input id="f-so" value="${esc(e.sizeOdezhda)}" placeholder="52-54"></div>
-      <div class="field"><label>Размер обуви</label><input id="f-sb" value="${esc(e.sizeObuv)}" placeholder="43"></div>
-      <div class="field"><label>Головной убор</label><input id="f-sg" value="${esc(e.sizeGolovnoi)}" placeholder="58"></div>
-    </div>`,
-    (m) => {
-      const fio = m.querySelector("#f-fio").value.trim();
-      if(!fio){ toast("Укажите ФИО","err"); return false; }
-      const rec = { id: id||uid(), fio,
-        tabnum: m.querySelector("#f-tab").value.trim(),
-        position: m.querySelector("#f-pos").value.trim(),
-        dept: m.querySelector("#f-dept").value.trim(),
-        sizeOdezhda: m.querySelector("#f-so").value.trim(),
-        sizeObuv: m.querySelector("#f-sb").value.trim(),
-        sizeGolovnoi: m.querySelector("#f-sg").value.trim() };
-      if(id) Object.assign(empById(id), rec); else db.employees.push(rec);
-      save(); render(); toast("Сохранено");
-    });
-}
-
-/* ================= НОМЕНКЛАТУРА СИЗ ================= */
-const ITEM_TYPES = ["Спецодежда","Спецобувь","Головной убор","Средства защиты рук","Средства защиты глаз","СИЗОД","Средства от падения","Смывающие средства","Прочее"];
-
-function renderItems(v){
-  const stock = stockMap();
-  const rows = db.items.map(i => {
-    const qty = [...stock.entries()].filter(([k])=>k.startsWith(i.id+"|")).reduce((s,[,q])=>s+q,0);
-    return `<tr>
-      <td><b>${esc(i.name)}</b></td><td>${esc(i.type)}</td>
-      <td class="num">${esc(i.unit)}</td>
-      <td class="num">${i.sockMonths} мес.</td>
-      <td class="num">${qty}</td>
-      <td style="white-space:nowrap">
-        <button class="btn small ghost" data-edit="${i.id}" type="button">Изм.</button>
-        <button class="btn small ghost" data-del="${i.id}" type="button" style="color:var(--red)">Удалить</button>
-      </td></tr>`;
-  }).join("");
-
-  v.innerHTML = `
-  <div class="view-head"><h2>Номенклатура СИЗ</h2>
-    <span class="hint">срок носки используется для расчёта даты окончания при выдаче</span>
-    <div style="flex:1"></div>
-    <button class="btn primary" id="add-item" type="button">+ Добавить позицию</button>
-  </div>
-  ${db.items.length ? `<div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>Наименование</th><th>Тип</th><th>Ед.</th><th>Срок носки</th><th>На складе</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`
-  : `<div class="empty">Номенклатура пуста. Добавьте позиции СИЗ с указанием срока носки в месяцах.</div>`}`;
-
-  document.getElementById("add-item").onclick = () => itemForm(null);
-  v.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => itemForm(b.dataset.edit));
-  v.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
-    const i = itemById(b.dataset.del);
-    if(confirm(`Удалить позицию «${i.name}»?`)){
-      db.items = db.items.filter(x=>x.id!==i.id); save(); render(); toast("Позиция удалена");
-    }
-  });
-}
-
-function itemForm(id){
-  const i = id ? itemById(id) : {name:"",type:ITEM_TYPES[0],unit:"шт",sockMonths:12};
-  openModal(id ? "Изменить позицию" : "Новая позиция СИЗ", `
-    <div class="field"><label>Наименование *</label><input id="f-name" value="${esc(i.name)}"></div>
-    <div class="form-row">
-      <div class="field"><label>Тип СИЗ</label><select id="f-type">${ITEM_TYPES.map(t=>`<option${t===i.type?" selected":""}>${t}</option>`).join("")}</select></div>
-      <div class="field"><label>Единица</label><input id="f-unit" value="${esc(i.unit)}"></div>
-      <div class="field"><label>Срок носки, мес. *</label><input id="f-sock" class="num" type="number" min="1" max="120" value="${i.sockMonths}"></div>
-    </div>`,
-    (m) => {
-      const name = m.querySelector("#f-name").value.trim();
-      const sock = +m.querySelector("#f-sock").value;
-      if(!name){ toast("Укажите наименование","err"); return false; }
-      if(!sock || sock < 1){ toast("Срок носки должен быть не менее 1 месяца","err"); return false; }
-      const rec = { id: id||uid(), name, type:m.querySelector("#f-type").value,
-        unit:m.querySelector("#f-unit").value.trim()||"шт", sockMonths:sock };
-      if(id) Object.assign(itemById(id), rec); else db.items.push(rec);
-      save(); render(); toast("Сохранено");
-    });
-}
-</script>
-<script>
-/* ================= Общий редактор строк документа ================= */
-function itemOptions(selectedId){
-  return `<option value="">— выберите —</option>` + db.items.map(i =>
-    `<option value="${i.id}"${i.id===selectedId?" selected":""}>${esc(i.name)} (${i.sockMonths} мес.)</option>`).join("");
-}
-function linesTable(container, lines, cols){
-  // cols: ['item','size','qty',('expiry'|'sock')]
-  const head = `<tr><th style="width:38%">Позиция СИЗ</th><th>Размер</th><th style="width:90px">Кол-во</th>${
-    cols.includes("expiry") ? `<th style="width:150px">Срок годности</th>` : ""}${
-    cols.includes("sock") ? `<th style="width:110px">Срок носки</th>` : ""}<th style="width:36px"></th></tr>`;
-  container.innerHTML = `<table><thead>${head}</thead><tbody></tbody></table>`;
-  const tbody = container.querySelector("tbody");
-  const draw = () => {
-    tbody.innerHTML = lines.map((l,idx) => `<tr>
-      <td><select data-f="itemId">${itemOptions(l.itemId)}</select></td>
-      <td><input data-f="size" value="${esc(l.size||"")}" placeholder="—"></td>
-      <td><input data-f="qty" class="num" type="number" min="0.5" step="0.5" value="${l.qty||1}"></td>
-      ${cols.includes("expiry") ? `<td><input data-f="expiry" class="num" type="date" value="${l.expiry||""}"></td>` : ""}
-      ${cols.includes("sock") ? `<td><input data-f="sockMonths" class="num" type="number" min="1" value="${l.sockMonths||""}"></td>` : ""}
-      <td><button class="line-del" type="button" title="Удалить строку">×</button></td>
-    </tr>`).join("");
-    tbody.querySelectorAll("tr").forEach((tr,idx) => {
-      tr.querySelectorAll("[data-f]").forEach(inp => inp.addEventListener("input", () => {
-        const f = inp.dataset.f;
-        lines[idx][f] = (f==="qty"||f==="sockMonths") ? (+inp.value||0) : inp.value;
-        if(f==="itemId"){
-          const it = itemById(inp.value);
-          if(it && cols.includes("sock")){ lines[idx].sockMonths = it.sockMonths; tr.querySelector('[data-f="sockMonths"]').value = it.sockMonths; }
-        }
-      }));
-      tr.querySelector(".line-del").addEventListener("click", () => { lines.splice(idx,1); draw(); });
-    });
-  };
-  draw();
-  return draw;
-}
-
-function docNumCell(prefix, num){ return `<span class="num">${prefix}-${String(num).padStart(4,"0")}</span>`; }
-
-/* ================= ПОСТУПЛЕНИЕ (приёмка) ================= */
-let receiptLines = [];
-function renderReceipts(v){
-  if(!receiptLines.length) receiptLines = [{itemId:"",size:"",qty:1,expiry:""}];
-  v.innerHTML = `
-  <div class="view-head"><h2>Поступление СИЗ (приёмка)</h2>
-    <span class="hint">количественный учёт; срок годности — по последней партии</span></div>
-  <div class="panel">
-    <h3>Новый документ</h3>
-    <div class="form-row">
-      <div class="field"><label>Дата</label><input id="r-date" class="num" type="date" value="${todayISO()}"></div>
-      <div class="field"><label>Поставщик</label><input id="r-sup" placeholder="ООО «Поставщик»"></div>
-    </div>
-    <div class="lines" id="r-lines"></div>
-    <div style="display:flex;gap:10px">
-      <button class="btn" id="r-addline" type="button">+ Строка</button>
-      <div style="flex:1"></div>
-      <button class="btn primary" id="r-save" type="button">Провести поступление</button>
-    </div>
-  </div>
-  <div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>Номер</th><th>Дата</th><th>Поставщик</th><th>Позиции</th><th>Кол-во</th></tr></thead>
-    <tbody>${[...db.receipts].sort((a,b)=>b.num-a.num).map(r=>`<tr>
-      <td>${docNumCell("ПС",r.num)}</td><td class="num">${fmtDate(r.date)}</td><td>${esc(r.supplier||"—")}</td>
-      <td>${r.lines.map(l=>esc(itemName(l.itemId))+(l.size?` (${esc(l.size)})`:"")).join("<br>")}</td>
-      <td class="num">${r.lines.reduce((s,l)=>s+(+l.qty||0),0)}</td></tr>`).join("") ||
-      `<tr><td colspan="5" style="color:var(--ink-2)">Документов пока нет</td></tr>`}</tbody></table></div>`;
-
-  linesTable(document.getElementById("r-lines"), receiptLines, ["item","size","qty","expiry"]);
-  document.getElementById("r-addline").onclick = () => {
-    receiptLines.push({itemId:"",size:"",qty:1,expiry:""});
-    linesTable(document.getElementById("r-lines"), receiptLines, ["item","size","qty","expiry"]);
-  };
-  document.getElementById("r-save").onclick = () => {
-    const date = document.getElementById("r-date").value;
-    const lines = receiptLines.filter(l=>l.itemId && l.qty>0);
-    if(!date){ toast("Укажите дату документа","err"); return; }
-    if(!lines.length){ toast("Добавьте хотя бы одну строку с позицией и количеством","err"); return; }
-    // Предупреждение: срок годности раньше типового срока носки
-    for(const l of lines){
-      const it = itemById(l.itemId);
-      if(l.expiry && it){
-        const need = endDateOf(date, it.sockMonths);
-        if(l.expiry < need) toast(`«${it.name}»: срок годности истекает раньше типового срока носки`,"warn");
-      }
-    }
-    db.seq.receipt++;
-    db.receipts.push({ id:uid(), num:db.seq.receipt, date,
-      supplier:document.getElementById("r-sup").value.trim(), lines });
-    receiptLines = [{itemId:"",size:"",qty:1,expiry:""}];
-    save(); render(); updateWarnBadge();
-    toast(`Поступление ПС-${String(db.seq.receipt).padStart(4,"0")} проведено`);
-  };
-}
-
-/* ================= ВЫДАЧА СИЗ ================= */
-let issueLines = [];
-function renderIssues(v){
-  if(!issueLines.length) issueLines = [{itemId:"",size:"",qty:1,sockMonths:""}];
-  const empOpts = `<option value="">— выберите сотрудника —</option>` +
-    db.employees.map(e=>`<option value="${e.id}">${esc(e.fio)}${e.position?` — ${esc(e.position)}`:""}</option>`).join("");
-
-  v.innerHTML = `
-  <div class="view-head"><h2>Выдача СИЗ</h2>
-    <span class="hint">дата окончания срока рассчитывается автоматически; просроченное выдать нельзя</span></div>
-  <div class="panel">
-    <h3>Новый документ</h3>
-    <div class="form-row">
-      <div class="field"><label>Дата выдачи</label><input id="i-date" class="num" type="date" value="${todayISO()}"></div>
-      <div class="field"><label>Сотрудник</label><select id="i-emp">${empOpts}</select></div>
-    </div>
-    <div class="field"><label class="check"><input type="checkbox" id="i-manual">
-      Ручной ввод истории (выдача прошлым периодом, остаток склада не затрагивается)</label></div>
-    <div class="lines" id="i-lines"></div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <button class="btn" id="i-addline" type="button">+ Строка</button>
-      <div style="flex:1"></div>
-      <button class="btn primary" id="i-save" type="button">Провести выдачу</button>
-    </div>
-  </div>
-  <div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>Номер</th><th>Дата</th><th>Сотрудник</th><th>Позиции</th><th>Кол-во</th><th>Режим</th></tr></thead>
-    <tbody>${[...db.issues].sort((a,b)=>b.num-a.num).map(i=>`<tr>
-      <td>${docNumCell("ВД",i.num)}</td><td class="num">${fmtDate(i.date)}</td><td>${esc(empName(i.employeeId))}</td>
-      <td>${i.lines.map(l=>esc(itemName(l.itemId))+(l.size?` (${esc(l.size)})`:"")+` <span class="num" style="color:var(--ink-2)">до ${fmtDate(l.endDate)}</span>`).join("<br>")}</td>
-      <td class="num">${i.lines.reduce((s,l)=>s+(+l.qty||0),0)}</td>
-      <td>${i.manual?`<span class="badge b-gray">история</span>`:`<span class="badge b-green">склад</span>`}</td></tr>`).join("") ||
-      `<tr><td colspan="6" style="color:var(--ink-2)">Документов пока нет</td></tr>`}</tbody></table></div>`;
-
-  linesTable(document.getElementById("i-lines"), issueLines, ["item","size","qty","sock"]);
-  document.getElementById("i-addline").onclick = () => {
-    issueLines.push({itemId:"",size:"",qty:1,sockMonths:""});
-    linesTable(document.getElementById("i-lines"), issueLines, ["item","size","qty","sock"]);
-  };
-  // Автоподстановка размера из карточки сотрудника
-  document.getElementById("i-emp").addEventListener("change", () => {
-    const e = empById(document.getElementById("i-emp").value);
-    if(!e) return;
-    for(const l of issueLines){
-      const it = itemById(l.itemId);
-      if(!it || l.size) continue;
-      if(it.type==="Спецодежда" && e.sizeOdezhda) l.size = e.sizeOdezhda;
-      if(it.type==="Спецобувь" && e.sizeObuv) l.size = e.sizeObuv;
-      if(it.type==="Головной убор" && e.sizeGolovnoi) l.size = e.sizeGolovnoi;
-    }
-    linesTable(document.getElementById("i-lines"), issueLines, ["item","size","qty","sock"]);
-  });
-
-  document.getElementById("i-save").onclick = () => {
-    const date = document.getElementById("i-date").value;
-    const empId = document.getElementById("i-emp").value;
-    const manual = document.getElementById("i-manual").checked;
-    const lines = issueLines.filter(l=>l.itemId && l.qty>0).map(l=>({...l}));
-    if(!date){ toast("Укажите дату выдачи","err"); return; }
-    if(!empId){ toast("Выберите сотрудника","err"); return; }
-    if(!lines.length){ toast("Добавьте хотя бы одну строку","err"); return; }
-
-    const expMap = expiryMap(), stock = stockMap();
-    const blocked = [], warned = [], noStock = [];
-    const needMap = new Map();
-    for(const l of lines){
-      const k = key(l.itemId,l.size);
-      needMap.set(k,(needMap.get(k)||0)+(+l.qty||0));
-      const exp = expMap.get(k);
-      if(exp){
-        const n = daysUntil(exp);
-        if(n < 0) blocked.push(`«${itemName(l.itemId)}»${l.size?` (${l.size})`:""} — срок годности истёк ${fmtDate(exp)}`);
-        else if(n <= db.settings.warnDays) warned.push(`«${itemName(l.itemId)}»${l.size?` (${l.size})`:""} — годен до ${fmtDate(exp)}`);
-      }
-    }
-    if(!manual) for(const [k,q] of needMap){
-      if((stock.get(k)||0) < q){
-        const [iid,sz] = k.split("|");
-        noStock.push(`«${itemName(iid)}»${sz?` (${sz})`:""}: требуется ${q}, на складе ${stock.get(k)||0}`);
-      }
-    }
-    if(blocked.length){
-      toast("Выдача запрещена — просроченные СИЗ использовать нельзя","err");
-      alert("СИЗ с истёкшим сроком использовать нельзя, выдача запрещена:\n\n• " + blocked.join("\n• "));
-      return;
-    }
-    if(noStock.length){ alert("Недостаточно остатков на складе:\n\n• " + noStock.join("\n• ")); return; }
-    if(warned.length && !confirm("Внимание — срок годности истекает скоро:\n\n• " + warned.join("\n• ") + "\n\nВсё равно провести выдачу?")) return;
-
-    for(const l of lines){
-      const it = itemById(l.itemId);
-      const months = +l.sockMonths || (it ? it.sockMonths : 0);
-      l.sockMonths = months;
-      l.endDate = endDateOf(date, months);
-    }
-    db.seq.issue++;
-    db.issues.push({ id:uid(), num:db.seq.issue, date, employeeId:empId, manual, lines });
-    issueLines = [{itemId:"",size:"",qty:1,sockMonths:""}];
-    save(); render(); updateWarnBadge();
-    toast(`Выдача ВД-${String(db.seq.issue).padStart(4,"0")} проведена`);
-  };
-}
-
-/* ================= СПИСАНИЕ ================= */
-const REASONS = ["Окончание срока эксплуатации","Износ","Порча","Утеря","Увольнение сотрудника"];
-let wLines = [];
-function renderWriteoffs(v){
-  if(!wLines.length) wLines = [{itemId:"",size:"",qty:1}];
-  const empOpts = `<option value="">— выберите сотрудника —</option>` +
-    db.employees.map(e=>`<option value="${e.id}">${esc(e.fio)}</option>`).join("");
-
-  v.innerHTML = `
-  <div class="view-head"><h2>Списание СИЗ</h2>
-    <span class="hint">просроченные СИЗ списываются, к выдаче не допускаются</span></div>
-  <div class="panel">
-    <h3>Новый документ</h3>
-    <div class="form-row">
-      <div class="field"><label>Дата</label><input id="w-date" class="num" type="date" value="${todayISO()}"></div>
-      <div class="field"><label>Откуда списываем</label><select id="w-scope">
-        <option value="stock">Со склада</option><option value="employee">У сотрудника</option></select></div>
-      <div class="field" id="w-emp-wrap" style="display:none"><label>Сотрудник</label><select id="w-emp">${empOpts}</select></div>
-      <div class="field"><label>Причина</label><select id="w-reason">${REASONS.map(r=>`<option>${r}</option>`).join("")}</select></div>
-    </div>
-    <div class="lines" id="w-lines"></div>
-    <div style="display:flex;gap:10px">
-      <button class="btn" id="w-addline" type="button">+ Строка</button>
-      <div style="flex:1"></div>
-      <button class="btn primary" id="w-save" type="button">Провести списание</button>
-    </div>
-  </div>
-  <div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>Номер</th><th>Дата</th><th>Откуда</th><th>Причина</th><th>Позиции</th><th>Кол-во</th></tr></thead>
-    <tbody>${[...db.writeoffs].sort((a,b)=>b.num-a.num).map(w=>`<tr>
-      <td>${docNumCell("СП",w.num)}</td><td class="num">${fmtDate(w.date)}</td>
-      <td>${w.scope==="stock"?"Склад":esc(empName(w.employeeId))}</td><td>${esc(w.reason)}</td>
-      <td>${w.lines.map(l=>esc(itemName(l.itemId))+(l.size?` (${esc(l.size)})`:"")).join("<br>")}</td>
-      <td class="num">${w.lines.reduce((s,l)=>s+(+l.qty||0),0)}</td></tr>`).join("") ||
-      `<tr><td colspan="6" style="color:var(--ink-2)">Документов пока нет</td></tr>`}</tbody></table></div>`;
-
-  document.getElementById("w-scope").addEventListener("change", e => {
-    document.getElementById("w-emp-wrap").style.display = e.target.value==="employee" ? "" : "none";
-  });
-  linesTable(document.getElementById("w-lines"), wLines, ["item","size","qty"]);
-  document.getElementById("w-addline").onclick = () => {
-    wLines.push({itemId:"",size:"",qty:1});
-    linesTable(document.getElementById("w-lines"), wLines, ["item","size","qty"]);
-  };
-  document.getElementById("w-save").onclick = () => {
-    const date = document.getElementById("w-date").value;
-    const scope = document.getElementById("w-scope").value;
-    const empId = document.getElementById("w-emp").value;
-    const lines = wLines.filter(l=>l.itemId && l.qty>0);
-    if(!date){ toast("Укажите дату","err"); return; }
-    if(scope==="employee" && !empId){ toast("Выберите сотрудника","err"); return; }
-    if(!lines.length){ toast("Добавьте хотя бы одну строку","err"); return; }
-    const problems = [];
-    const stock = stockMap();
-    for(const l of lines){
-      const avail = scope==="stock" ? (stock.get(key(l.itemId,l.size))||0)
-                                    : holdingQty(empId, l.itemId, l.size||"");
-      if(avail < +l.qty) problems.push(`«${itemName(l.itemId)}»${l.size?` (${l.size})`:""}: доступно ${avail}, списывается ${l.qty}`);
-    }
-    if(problems.length){ alert("Нельзя списать больше, чем числится:\n\n• " + problems.join("\n• ")); return; }
-    db.seq.writeoff++;
-    db.writeoffs.push({ id:uid(), num:db.seq.writeoff, date, scope,
-      employeeId: scope==="employee"?empId:null,
-      reason: document.getElementById("w-reason").value, lines });
-    wLines = [{itemId:"",size:"",qty:1}];
-    save(); render(); updateWarnBadge();
-    toast(`Списание СП-${String(db.seq.writeoff).padStart(4,"0")} проведено`);
-  };
-}
-</script>
-<script>
-/* ================= ЛИЧНЫЕ КАРТОЧКИ ================= */
-let cardEmployeeId = null;
-function renderCards(v){
-  const e = cardEmployeeId ? empById(cardEmployeeId) : db.employees[0];
-  if(e) cardEmployeeId = e.id;
-  const empOpts = db.employees.map(x=>`<option value="${x.id}"${e&&x.id===e.id?" selected":""}>${esc(x.fio)}</option>`).join("");
-
-  let cardHTML = `<div class="empty">Нет сотрудников. Сначала добавьте сотрудников в справочнике.</div>`;
-  if(e){
-    const hold = holdingsLines().filter(l=>l.empId===e.id).sort((a,b)=>a.date.localeCompare(b.date));
-    const rows = hold.map(l=>{
-      const st = statusOf(l.endDate);
-      return `<tr class="st-${st.code==="expired"?"expired":st.code==="warn"?"warn":"x"}">
-        <td>${esc(itemName(l.itemId))}</td><td class="num">${esc(l.size||"—")}</td>
-        <td class="num">${fmtDate(l.date)}</td><td class="num">${l.left}</td>
-        <td class="num">${fmtDate(l.endDate)}</td>
-        <td><span class="badge ${st.cls}">${st.label}</span></td>
-        <td class="num">ВД-${String(l.docNum).padStart(4,"0")}</td></tr>`;
-    }).join("");
-    cardHTML = `
-    <div class="card-doc" id="card-print">
-      <h3>Личная карточка учёта выдачи СИЗ</h3>
-      <div class="sub">по мотивам приложения № 2 к Правилам, утв. приказом Минтруда от 29.10.2021 № 766н</div>
-      <div class="card-meta">
-        <div>Организация: <b>${esc(db.settings.orgName||"____________________")}</b></div>
-        <div>Табельный №: <b class="num">${esc(e.tabnum||"—")}</b></div>
-        <div>Работник: <b>${esc(e.fio)}</b></div>
-        <div>Подразделение: <b>${esc(e.dept||"—")}</b></div>
-        <div>Должность: <b>${esc(e.position||"—")}</b></div>
-        <div>Размеры (одежда/обувь/гол. убор): <b class="num">${esc(e.sizeOdezhda||"—")} / ${esc(e.sizeObuv||"—")} / ${esc(e.sizeGolovnoi||"—")}</b></div>
-      </div>
-      <table>
-        <thead><tr><th>Наименование СИЗ</th><th>Размер</th><th>Дата выдачи</th><th>Кол-во</th><th>Срок до</th><th>Состояние</th><th>Документ</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="7" style="color:var(--ink-2)">Выданных СИЗ нет</td></tr>`}</tbody>
-      </table>
-      <p style="margin-top:14px;font-size:12px;color:var(--ink-2)">
-        Карточка ведётся в электронном виде (п. 25–26 Правил № 766н): вместо личной подписи работника
-        указываются реквизиты документа выдачи. Сформирована ${fmtDate(todayISO())}.
-      </p>
-    </div>`;
-  }
-
-  v.innerHTML = `
-  <div class="view-head"><h2>Личные карточки</h2>
-    <span class="hint">строки формируются из документов выдачи автоматически</span></div>
-  <div class="filters no-print">
-    <div class="field"><label>Сотрудник</label><select id="c-emp" style="min-width:280px">${empOpts}</select></div>
-    <button class="btn" id="c-print" type="button" ${e?"":"disabled"}>Печать карточки</button>
-    <button class="btn" id="c-csv" type="button" ${e?"":"disabled"}>Выгрузить в CSV</button>
-  </div>
-  ${cardHTML}`;
-
-  const sel = document.getElementById("c-emp");
-  if(sel) sel.addEventListener("change", () => { cardEmployeeId = sel.value; render(); });
-  const bp = document.getElementById("c-print");
-  if(bp && e) bp.onclick = () => window.print();
-  const bc = document.getElementById("c-csv");
-  if(bc && e) bc.onclick = () => {
-    const hold = holdingsLines().filter(l=>l.empId===e.id);
-    downloadCSV(`личная_карточка_${e.fio.replace(/\s+/g,"_")}.csv`,
-      [["Наименование","Размер","Дата выдачи","Количество","Срок до","Состояние","Документ"],
-       ...hold.map(l=>[itemName(l.itemId), l.size||"", fmtDate(l.date), l.left, fmtDate(l.endDate),
-         statusOf(l.endDate).label, `ВД-${String(l.docNum).padStart(4,"0")}`])]);
-    toast("CSV сохранён");
-  };
-}
-
-/* ================= ОТЧЁТЫ ================= */
-let reportTab = "issues";
-function switchReportTab(t){ reportTab = t; render(); }
-function renderReports(v){
-  v.innerHTML = `
-  <div class="view-head"><h2>Отчёты</h2><span class="hint">все отчёты выгружаются в CSV (открывается в Excel)</span></div>
-  <div class="tabs">
-    <button type="button" data-tab="issues" class="${reportTab==="issues"?"active":""}">Выдача за период</button>
-    <button type="button" data-tab="expiring" class="${reportTab==="expiring"?"active":""}">Истекающие сроки</button>
-    <button type="button" data-tab="stock" class="${reportTab==="stock"?"active":""}">Остатки на складе</button>
-  </div>
-  <div id="rep-body"></div>`;
-  v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => switchReportTab(b.dataset.tab));
-  ({ issues:repIssues, expiring:repExpiring, stock:repStock })[reportTab](document.getElementById("rep-body"));
-}
-
-function repIssues(el){
-  const to = todayISO();
-  const from = toISO(new Date(Date.now() - 90*86400000));
-  el.innerHTML = `
-  <div class="filters">
-    <div class="field"><label>Период с</label><input id="p-from" class="num" type="date" value="${from}"></div>
-    <div class="field"><label>по</label><input id="p-to" class="num" type="date" value="${to}"></div>
-    <div class="field"><label>Сотрудник</label><select id="p-emp"><option value="">Все</option>${
-      db.employees.map(e=>`<option value="${e.id}">${esc(e.fio)}</option>`).join("")}</select></div>
-    <button class="btn primary" id="p-run" type="button">Сформировать</button>
-    <button class="btn" id="p-csv" type="button">В CSV</button>
-  </div>
-  <div class="panel" style="padding:0;overflow-x:auto" id="p-out"></div>`;
-  const run = () => {
-    const f = document.getElementById("p-from").value, t = document.getElementById("p-to").value;
-    const empId = document.getElementById("p-emp").value;
-    const rows = [];
-    for(const i of db.issues){
-      if(i.date < f || i.date > t) continue;
-      if(empId && i.employeeId !== empId) continue;
-      for(const l of i.lines) rows.push({ date:i.date, num:i.num, emp:empName(i.employeeId),
-        name:itemName(l.itemId), size:l.size||"", qty:l.qty, sock:l.sockMonths, end:l.endDate });
-    }
-    rows.sort((a,b)=>a.date.localeCompare(b.date));
-    const total = rows.reduce((s,r)=>s+(+r.qty||0),0);
-    document.getElementById("p-out").innerHTML = `<table>
-      <thead><tr><th>Дата</th><th>Документ</th><th>Сотрудник</th><th>СИЗ</th><th>Размер</th><th>Кол-во</th><th>Срок носки</th><th>Годно до</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr><td class="num">${fmtDate(r.date)}</td><td class="num">ВД-${String(r.num).padStart(4,"0")}</td>
-        <td>${esc(r.emp)}</td><td>${esc(r.name)}</td><td class="num">${esc(r.size||"—")}</td>
-        <td class="num">${r.qty}</td><td class="num">${r.sock} мес.</td><td class="num">${fmtDate(r.end)}</td></tr>`).join("") ||
-        `<tr><td colspan="8" style="color:var(--ink-2)">За период выдач не найдено</td></tr>`}</tbody>
-      <tfoot><tr><td colspan="5" style="padding:8px 10px;font-weight:700">Итого</td><td class="num" style="font-weight:700">${total}</td><td colspan="2"></td></tr></tfoot></table>`;
-    document.getElementById("p-csv").onclick = () => {
-      downloadCSV("выдача_СИЗ_за_период.csv",
-        [["Дата","Документ","Сотрудник","СИЗ","Размер","Количество","Срок носки (мес.)","Годно до"],
-         ...rows.map(r=>[fmtDate(r.date),`ВД-${String(r.num).padStart(4,"0")}`,r.emp,r.name,r.size,r.qty,r.sock,fmtDate(r.end)])]);
-      toast("CSV сохранён");
-    };
-  };
-  document.getElementById("p-run").onclick = run; run();
-}
-
-function repExpiring(el){
-  el.innerHTML = `
-  <div class="filters">
-    <div class="field"><label>Истекают в ближайшие</label><select id="e-days" class="num">
-      <option value="30">30 дней</option><option value="60" selected>60 дней</option><option value="90">90 дней</option>
-    </select></div>
-    <button class="btn primary" id="e-run" type="button">Сформировать</button>
-    <button class="btn" id="e-csv" type="button">В CSV</button>
-  </div>
-  <div class="panel" style="padding:0;overflow-x:auto" id="e-out"></div>`;
-  const run = () => {
-    const days = +document.getElementById("e-days").value;
-    const rows = [];
-    for(const l of holdingsLines()){
-      const n = daysUntil(l.endDate);
-      if(n !== null && n <= days) rows.push({ where:empName(l.empId), name:itemName(l.itemId),
-        size:l.size||"", qty:l.left, end:l.endDate, n, src:"выдано" });
-    }
-    const stock = stockMap();
-    for(const [k,dt] of expiryMap()){
-      const q = stock.get(k)||0; if(q <= 0) continue;
-      const n = daysUntil(dt);
-      if(n !== null && n <= days){
-        const [iid,sz] = k.split("|");
-        rows.push({ where:"Склад", name:itemName(iid), size:sz, qty:q, end:dt, n, src:"склад" });
-      }
-    }
-    rows.sort((a,b)=>a.n-b.n);
-    document.getElementById("e-out").innerHTML = `<table>
-      <thead><tr><th>Где</th><th>СИЗ</th><th>Размер</th><th>Кол-во</th><th>Срок до</th><th>Осталось дней</th><th>Статус</th></tr></thead>
-      <tbody>${rows.map(r=>{
-        const st = statusOf(r.end);
-        const cls = st.code==="expired"?"expired":st.code==="warn"?"warn":"x";
-        return `<tr class="st-${cls}"><td>${esc(r.where)}</td><td>${esc(r.name)}</td><td class="num">${esc(r.size||"—")}</td>
-          <td class="num">${r.qty}</td><td class="num">${fmtDate(r.end)}</td>
-          <td class="num">${r.n<0?"просрочено "+(-r.n)+" дн.":r.n}</td>
-          <td><span class="badge ${st.cls}">${st.code==="expired"?"Просрочено — нельзя использовать":st.label}</span></td></tr>`;
-      }).join("") || `<tr><td colspan="7" style="color:var(--ink-2)">В горизонте ${days} дней истекающих сроков нет</td></tr>`}</tbody></table>`;
-    document.getElementById("e-csv").onclick = () => {
-      downloadCSV(`истекающие_сроки_${days}_дней.csv`,
-        [["Где","СИЗ","Размер","Количество","Срок до","Осталось дней","Статус"],
-         ...rows.map(r=>[r.where,r.name,r.size,r.qty,fmtDate(r.end),r.n,statusOf(r.end).label])]);
-      toast("CSV сохранён");
-    };
-  };
-  document.getElementById("e-run").onclick = run; run();
-}
-
-function repStock(el){
-  const stock = stockMap(), expMap = expiryMap();
-  const rows = [...stock.entries()].map(([k,q])=>{
-    const [iid,sz] = k.split("|");
-    const exp = expMap.get(k)||"";
-    return { name:itemName(iid), size:sz, qty:q, exp };
-  }).filter(r=>r.qty>0).sort((a,b)=>a.name.localeCompare(b.name,"ru"));
-  el.innerHTML = `
-  <div class="filters"><button class="btn" id="s-csv" type="button">В CSV</button></div>
-  <div class="panel" style="padding:0;overflow-x:auto"><table>
-    <thead><tr><th>СИЗ</th><th>Размер</th><th>Остаток</th><th>Срок годности</th><th>Статус</th></tr></thead>
-    <tbody>${rows.map(r=>{
-      const st = statusOf(r.exp);
-      const cls = st.code==="expired"?"expired":st.code==="warn"?"warn":"x";
-      return `<tr class="st-${cls}"><td>${esc(r.name)}</td><td class="num">${esc(r.size||"—")}</td>
-        <td class="num"><b>${r.qty}</b></td><td class="num">${fmtDate(r.exp)}</td>
-        <td><span class="badge ${st.cls}">${r.exp?st.label:"Без срока"}</span></td></tr>`;
-    }).join("") || `<tr><td colspan="5" style="color:var(--ink-2)">Склад пуст — оформите поступление</td></tr>`}</tbody></table></div>`;
-  document.getElementById("s-csv").onclick = () => {
-    downloadCSV("остатки_СИЗ_на_складе.csv",
-      [["СИЗ","Размер","Остаток","Срок годности","Статус"],
-       ...rows.map(r=>[r.name,r.size,r.qty,fmtDate(r.exp),r.exp?statusOf(r.exp).label:"Без срока"])]);
-    toast("CSV сохранён");
-  };
-}
-</script>
-<script>
-/* ================= ДАННЫЕ И НАСТРОЙКИ ================= */
-function renderData(v){
-  v.innerHTML = `
-  <div class="view-head"><h2>Данные и настройки</h2></div>
-  <div class="panel">
-    <h3>Настройки</h3>
-    <div class="form-row">
-      <div class="field"><label>Название организации (для печати карточек)</label>
-        <input id="s-org" value="${esc(db.settings.orgName)}" placeholder="ООО «Агрокомплекс»"></div>
-      <div class="field"><label>Порог предупреждения, дней</label>
-        <input id="s-warn" class="num" type="number" min="1" max="180" value="${db.settings.warnDays}"></div>
-    </div>
-    <button class="btn primary" id="s-save" type="button">Сохранить настройки</button>
-  </div>
-  <div class="panel">
-    <h3>Перенос данных</h3>
-    <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
-      Данные хранятся только в этом браузере. Для переноса на другой компьютер выгрузите файл JSON
-      и загрузите его там. Очистка данных браузера удалит базу — делайте выгрузку регулярно.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn" id="s-export" type="button">Выгрузить базу (JSON)</button>
-      <label class="btn" for="s-import">Загрузить базу (JSON)</label>
-      <input id="s-import" type="file" accept=".json,application/json" style="display:none">
-    </div>
-  </div>
-  <div class="panel">
-    <h3>Демонстрационные данные</h3>
-    <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
-      Заполнит базу примером: 3 сотрудника, 5 позиций СИЗ, поступления (включая просроченную партию),
-      выдачи с разными сроками — сразу видно цветовую индикацию и блокировки.</p>
-    <button class="btn" id="s-demo" type="button">Загрузить демо-данные</button>
-  </div>
-  <div class="panel" style="border-color:var(--red)">
-    <h3 style="color:var(--red)">Опасная зона</h3>
-    <button class="btn danger" id="s-wipe" type="button">Удалить все данные</button>
-  </div>`;
-
-  document.getElementById("s-save").onclick = () => {
-    db.settings.orgName = document.getElementById("s-org").value.trim();
-    db.settings.warnDays = Math.max(1, +document.getElementById("s-warn").value || 30);
-    save(); updateWarnBadge(); toast("Настройки сохранены");
-  };
-  document.getElementById("s-export").onclick = () => {
-    const blob = new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `учет_сиз_выгрузка_${todayISO()}.json`; a.click();
-    URL.revokeObjectURL(a.href); toast("Файл выгрузки сохранён");
-  };
-  document.getElementById("s-import").addEventListener("change", ev => {
-    const f = ev.target.files[0]; if(!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try{
-        const d = JSON.parse(rd.result);
-        if(!d.items || !d.employees) throw new Error("формат");
-        db = Object.assign(EMPTY_DB(), d);
-        save(); render(); updateWarnBadge();
-        toast("База загружена: " + db.items.length + " позиций, " + db.employees.length + " сотрудников");
-      }catch(e){ toast("Не удалось прочитать файл — неверный формат","err"); }
-    };
-    rd.readAsText(f);
-    ev.target.value = "";
-  });
-  document.getElementById("s-demo").onclick = () => {
-    if(!confirm("Текущие данные будут заменены демонстрационными. Продолжить?")) return;
-    loadDemo(); save(); showView("dashboard"); toast("Демо-данные загружены");
-  };
-  document.getElementById("s-wipe").onclick = () => {
-    if(confirm("Удалить ВСЕ данные безвозвратно?")){ db = EMPTY_DB(); save(); render(); updateWarnBadge(); toast("База очищена"); }
-  };
-}
-
-function loadDemo(){
-  db = EMPTY_DB();
-  const e1={id:uid(),fio:"Иванов Сергей Петрович",tabnum:"0012",position:"Тракторист",dept:"Мехотряд №1",sizeOdezhda:"52-54",sizeObuv:"43",sizeGolovnoi:"58"};
-  const e2={id:uid(),fio:"Петрова Анна Владимировна",tabnum:"0031",position:"Лаборант",dept:"Лаборатория",sizeOdezhda:"44-46",sizeObuv:"37",sizeGolovnoi:"56"};
-  const e3={id:uid(),fio:"Сидоров Олег Николаевич",tabnum:"0045",position:"Сварщик",dept:"Ремонтная мастерская",sizeOdezhda:"56-58",sizeObuv:"45",sizeGolovnoi:"60"};
-  db.employees.push(e1,e2,e3);
-  const i1={id:uid(),name:"Костюм х/б",type:"Спецодежда",unit:"шт",sockMonths:12};
-  const i2={id:uid(),name:"Ботинки кожаные",type:"Спецобувь",unit:"пара",sockMonths:12};
-  const i3={id:uid(),name:"Перчатки комбинированные",type:"Средства защиты рук",unit:"пара",sockMonths:1};
-  const i4={id:uid(),name:"Каска защитная",type:"Головной убор",unit:"шт",sockMonths:24};
-  const i5={id:uid(),name:"Маска сварщика",type:"Средства защиты глаз",unit:"шт",sockMonths:12};
-  db.items.push(i1,i2,i3,i4,i5);
-
-  const d = n => toISO(new Date(Date.now() + n*86400000));
-  // Поступления: у ботинок просроченный срок годности, у перчаток — близкий
-  db.seq.receipt = 2;
-  db.receipts.push(
-    {id:uid(),num:1,date:d(-40),supplier:"ООО «Спецодежда-Поволжье»",lines:[
-      {itemId:i1.id,size:"52-54",qty:5,expiry:d(700)},{itemId:i1.id,size:"44-46",qty:3,expiry:d(700)},
-      {itemId:i2.id,size:"43",qty:4,expiry:d(-5)},{itemId:i2.id,size:"45",qty:2,expiry:d(-5)},
-      {itemId:i3.id,size:"",qty:30,expiry:d(20)}]},
-    {id:uid(),num:2,date:d(-10),supplier:"АО «Защита»",lines:[
-      {itemId:i4.id,size:"",qty:6,expiry:""},{itemId:i5.id,size:"",qty:3,expiry:d(400)}]}
-  );
-  // Выдачи: Иванову давно (перчатки уже просрочены), Петровой недавно
-  db.seq.issue = 3;
-  db.issues.push(
-    {id:uid(),num:1,date:d(-45),employeeId:e1.id,manual:false,lines:[
-      {itemId:i1.id,size:"52-54",qty:1,sockMonths:12,endDate:endDateOf(d(-45),12)},
-      {itemId:i3.id,size:"",qty:2,sockMonths:1,endDate:endDateOf(d(-45),1)}]},
-    {id:uid(),num:2,date:d(-8),employeeId:e2.id,manual:false,lines:[
-      {itemId:i1.id,size:"44-46",qty:1,sockMonths:12,endDate:endDateOf(d(-8),12)},
-      {itemId:i3.id,size:"",qty:4,sockMonths:1,endDate:endDateOf(d(-8),1)}]},
-    {id:uid(),num:3,date:d(-200),employeeId:e3.id,manual:true,lines:[
-      {itemId:i5.id,size:"",qty:1,sockMonths:12,endDate:endDateOf(d(-200),12)},
-      {itemId:i4.id,size:"",qty:1,sockMonths:24,endDate:endDateOf(d(-200),24)}]}
-  );
-  db.seq.writeoff = 1;
-  db.writeoffs.push({id:uid(),num:1,date:d(-30),scope:"employee",employeeId:e1.id,
-    reason:"Износ",lines:[{itemId:i3.id,size:"",qty:1}]});
-}
-
-/* ================= ЗАПУСК ================= */
-(function init(){
-  const h = (location.hash||"").replace("#","");
-  if(VIEWS.some(v=>v.id===h)) currentView = h;
-  showView(currentView);
-})();
-</script>
+<div id="print-root"></div>
+<script src="js/app-1-db.js"></script>
+<script src="js/app-2-core.js"></script>
+<script src="js/app-3-views.js"></script>
+<script src="js/app-4-docs.js"></script>
+<script src="js/app-5-forms.js"></script>
+<script src="js/app-6-cards-reports.js"></script>
+<script src="js/app-7-data-init.js"></script>
 </body>
 </html>
