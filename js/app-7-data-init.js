@@ -1,3 +1,4 @@
+
 "use strict";
 /* ================= ДАННЫЕ И НАСТРОЙКИ ================= */
 function renderData(v){
@@ -57,17 +58,19 @@ function renderData(v){
     <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
       В Excel: «Файл → Сохранить как → CSV (разделители — точка с запятой)», затем загрузите файл сюда.
       Уже существующие записи (сотрудники — по ФИО и таб. №, позиции — по наименованию) пропускаются.
-      Кодировка UTF-8 и Windows-1251 определяется автоматически. Если срок носки не указан, позиция получит срок 12 мес. — отредактируйте потом в справочнике.</p>
+      Кодировка UTF-8 и Windows-1251 определяется автоматически. Если срок носки не указан, позиция получит срок 12 мес. — отредактируйте потом в справочнике. Нормы выдачи загружаются отдельным файлом: колонки «Норма; Наименование СИЗ; Кол-во на срок носки; Срок носки (мес); Пункт ЕТН». Позиции из файла норм, которых нет в номенклатуре, создаются автоматически; чтобы привязать строку нормы к уже имеющейся позиции склада, впишите её наименование точно как в справочнике номенклатуры.</p>
     <div class="form-row">
       <div class="field"><label>Что импортируем</label><select id="imp-kind">
         <option value="employees">Сотрудники</option>
         <option value="items">Номенклатура СИЗ</option>
+        <option value="norms">Нормы выдачи (по ЕТН)</option>
       </select></div>
       <div class="field"><label>Файл CSV</label><input id="imp-file" type="file" accept=".csv,text/csv"></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn" id="imp-tpl-emp" type="button">Шаблон: сотрудники</button>
       <button class="btn" id="imp-tpl-item" type="button">Шаблон: номенклатура</button>
+      <button class="btn" id="imp-tpl-norm" type="button">Шаблон: нормы</button>
       <button class="btn primary" id="imp-run" type="button">Импортировать</button>
     </div>
   </div>
@@ -147,6 +150,12 @@ function renderData(v){
       [["Наименование","Тип","Единица","Срок носки (мес)","Пункт норм","Модель"],
        ["Костюм х/б","Спецодежда","шт","12","п. 44 табл. 1 ЕТН","ТУ 8572-001-…"]]);
   };
+  document.getElementById("imp-tpl-norm").onclick = () => {
+    downloadCSV("шаблон_нормы.csv",
+      [["Норма (профессия)","Наименование СИЗ","Кол-во на срок носки","Срок носки (мес)","Пункт ЕТН"],
+       ["Тракторист-машинист с/х производства (п. 4904 ЕТН)","Костюм для защиты от механических воздействий (истирания)","1","12","п. 4904 прил. 1 ЕТН"],
+       ["Тракторист-машинист с/х производства (п. 4904 ЕТН)","Перчатки для защиты от механических воздействий (истирания)","1","1","п. 4904 прил. 1 ЕТН"]]);
+  };
   document.getElementById("imp-run").onclick = () => {
     const f = document.getElementById("imp-file").files[0];
     if(!f){ toast("Выберите файл CSV","err"); return; }
@@ -204,6 +213,18 @@ function parseRuDate(s){
   if(m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
+function guessItemType(name){
+  const s = (name||"").toLowerCase();
+  if(/привязь|пояс предохран|строп/.test(s)) return "Средства от падения";
+  if(/комбинезон|костюм|куртк|брюк|пальто|полупальто|плащ|халат|фартук|жилет|бель[её]|полукомбинезон|нарукавник|накомарник|блуз|сарафан/.test(s)) return "Спецодежда";
+  if(/ботинк|сапог|полусапог|обувь|галош|валенк|тапочк|бахил|наколенник/.test(s)) return "Спецобувь";
+  if(/перчатк|рукавиц|наперсток|наладонник/.test(s)) return "Средства защиты рук";
+  if(/каск|шлем|головн|подшлемник|шапк|берет|колпак/.test(s)) return "Головной убор";
+  if(/очки|щиток|светофильтр|маска сварщика/.test(s)) return "Средства защиты глаз";
+  if(/респиратор|противогаз|полумаск|самоспасател|сизод|дыхани/.test(s)) return "СИЗОД";
+  if(/мыло|крем|паста|смывающ|очищающ/.test(s)) return "Смывающие средства";
+  return "Прочее";
+}
 function importCSV(kind, text){
   const rows = parseCSV(text);
   if(rows.length < 2){ toast("Файл пуст или нет строк данных","err"); return; }
@@ -226,6 +247,36 @@ function importCSV(kind, text){
         normId: norm ? norm.id : "" });
       added++;
     }
+  }else if(kind === "norms"){
+    let normsNew = 0, itemsNew = 0, addedLines = 0, dup = 0;
+    for(const r of data){
+      const normTitle = (r[0]||"").trim();
+      const itemTitle = (r[1]||"").trim();
+      if(!normTitle || !itemTitle){ dup++; continue; }
+      const qty = parseFloat((r[2]||"").replace(",",".")) || 1;
+      const sock = parseInt((r[3]||"").replace(",","."), 10);
+      const point = (r[4]||"").trim();
+      let norm = db.norms.find(n => n.name.trim().toLowerCase() === normTitle.toLowerCase());
+      if(!norm){
+        norm = { id:uid(), num:db.seq.norm++, name:normTitle, normPoint:point, note:"", lines:[] };
+        db.norms.push(norm); normsNew++;
+      }else if(point && !norm.normPoint){ norm.normPoint = point; }
+      let item = db.items.find(i => i.name.trim().toLowerCase() === itemTitle.toLowerCase());
+      if(!item){
+        item = { id:uid(), name:itemTitle, type:guessItemType(itemTitle),
+          unit:/перчатк|рукавиц|ботинк|сапог|обувь|галош|валенк|наколенник/i.test(itemTitle) ? "пара" : "шт",
+          sockMonths: sock >= 1 ? sock : 12, normPoint:point, model:"" };
+        db.items.push(item); itemsNew++;
+      }else{
+        if(sock >= 1 && item.sockMonths !== sock) item.sockMonths = sock;
+        if(point && !item.normPoint) item.normPoint = point;
+      }
+      if(norm.lines.some(l => l.itemId === item.id)){ dup++; continue; }
+      norm.lines.push({ itemId:item.id, qty }); addedLines++;
+    }
+    save(); render(); updateWarnBadge();
+    toast(`Нормы: создано ${normsNew}; строк добавлено: ${addedLines}; новых позиций в номенклатуре: ${itemsNew}; пропущено (дубли/пустые): ${dup}`, addedLines ? "" : "warn");
+    return;
   }else{
     for(const r of data){
       const name = r[0]||"";
