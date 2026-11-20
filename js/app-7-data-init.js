@@ -58,7 +58,7 @@ function renderData(v){
     <p style="font-size:14px;color:var(--ink-2);margin-bottom:12px">
       В Excel: «Файл → Сохранить как → CSV (разделители — точка с запятой)», затем загрузите файл сюда.
       Уже существующие записи (сотрудники — по ФИО и таб. №, позиции — по наименованию) пропускаются.
-      Кодировка UTF-8 и Windows-1251 определяется автоматически. Если срок носки не указан, позиция получит срок 12 мес. — отредактируйте потом в справочнике. Нормы выдачи загружаются отдельным файлом: колонки «Норма; Наименование СИЗ; Кол-во на срок носки; Срок носки (мес); Пункт ЕТН». Позиции из файла норм, которых нет в номенклатуре, создаются автоматически; чтобы привязать строку нормы к уже имеющейся позиции склада, впишите её наименование точно как в справочнике номенклатуры.</p>
+      Кодировка UTF-8 и Windows-1251 определяется автоматически. Если срок носки не указан, позиция получит срок 12 мес. — отредактируйте потом в справочнике. Нормы выдачи загружаются отдельным файлом: колонки «Норма; Наименование СИЗ; Кол-во на срок носки; Срок носки (мес); Пункт ЕТН». Позиции из файла норм, которых нет в номенклатуре, создаются автоматически; чтобы привязать строку нормы к уже имеющейся позиции склада, впишите её наименование точно как в справочнике номенклатуры. Повторный импорт номенклатуры обновляет уже имеющиеся позиции: дозаполняет тип, пункт норм и модель, а срок носки меняет, только если он остался по умолчанию (12 мес.) — заполненное вами вручную не затирается.</p>
     <div class="form-row">
       <div class="field"><label>Что импортируем</label><select id="imp-kind">
         <option value="employees">Сотрудники</option>
@@ -229,7 +229,7 @@ function importCSV(kind, text){
   const rows = parseCSV(text);
   if(rows.length < 2){ toast("Файл пуст или нет строк данных","err"); return; }
   const data = rows.slice(1); // первая строка — заголовок
-  let added = 0, skipped = 0, defaulted = 0;
+  let added = 0, skipped = 0, defaulted = 0, updated = 0;
   if(kind === "employees"){
     for(const r of data){
       const fio = r[0]||"";
@@ -281,7 +281,19 @@ function importCSV(kind, text){
     for(const r of data){
       const name = r[0]||"";
       if(!name){ skipped++; continue; }
-      if(db.items.some(i => i.name.toLowerCase()===name.toLowerCase())){ skipped++; continue; }
+      const ex = db.items.find(i => i.name.toLowerCase()===name.toLowerCase());
+      if(ex){
+        let upd = false;
+        if(ITEM_TYPES.includes(r[1]) && (!ex.type || ex.type === "Прочее") && ex.type !== r[1]){ ex.type = r[1]; upd = true; }
+        const usock = parseInt((r[3]||"").replace(",","."), 10);
+        if(usock >= 1 && ex.sockMonths === 12 && ex.sockMonths !== usock){ ex.sockMonths = usock; upd = true; }
+        const uunit = (r[2]||"").trim();
+        if(uunit && (!ex.unit || ex.unit === "шт") && ex.unit !== uunit){ ex.unit = uunit; upd = true; }
+        if(r[4] && !ex.normPoint){ ex.normPoint = r[4]; upd = true; }
+        if(r[5] && !ex.model){ ex.model = r[5]; upd = true; }
+        if(upd){ updated++; }else{ skipped++; }
+        continue;
+      }
       let sock = parseInt((r[3]||"").replace(",","."), 10);
       if(!(sock >= 1)){ sock = 12; defaulted++; } // срок не указан — ставим 12 мес., правится в справочнике
       db.items.push({ id:uid(), name,
@@ -291,8 +303,9 @@ function importCSV(kind, text){
     }
   }
   save(); render(); updateWarnBadge();
-  toast(`Импортировано: ${added}; пропущено (дубли/пустые строки): ${skipped}` +
-    (defaulted ? `; без срока носки — установлен 12 мес.: ${defaulted}` : ""), added ? "" : "warn");
+  toast(`Импортировано: ${added}` + (updated ? `; обновлено: ${updated}` : "") +
+    `; пропущено (дубли/пустые строки): ${skipped}` +
+    (defaulted ? `; без срока носки — установлен 12 мес.: ${defaulted}` : ""), (added || updated) ? "" : "warn");
 }
 
 function loadDemo(){
