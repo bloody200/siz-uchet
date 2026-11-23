@@ -37,16 +37,28 @@ function b64ToBytes(b64){
   for(let i=0;i<s.length;i++) a[i] = s.charCodeAt(i);
   return a;
 }
+// Онлайн-вариант (GitHub Pages): движок sql.js подгружается с CDN; если один недоступен — пробуем следующий
+const SQL_CDNS = [
+  "https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/",
+  "https://unpkg.com/sql.js@1.12.0/dist/",
+  "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/"
+];
 async function initSql(){
-  // Онлайн-вариант (GitHub Pages): движок sql.js подгружается с CDN jsDelivr
-  await new Promise((res, rej) => {
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/sql-wasm.js";
-    s.onload = res;
-    s.onerror = () => rej(new Error("нет доступа к cdn.jsdelivr.net"));
-    document.head.appendChild(s);
-  });
-  SQL = await initSqlJs({ locateFile: f => "https://cdn.jsdelivr.net/npm/sql.js@1.12.0/dist/" + f });
+  let lastErr = new Error("все CDN недоступны");
+  for(const base of SQL_CDNS){
+    try{
+      await new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = base + "sql-wasm.js";
+        s.onload = res;
+        s.onerror = () => rej(new Error("нет доступа к " + base));
+        document.head.appendChild(s);
+      });
+      SQL = await initSqlJs({ locateFile: f => base + f });
+      return;
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr;
 }
 
 /* ---------- Схема ---------- */
